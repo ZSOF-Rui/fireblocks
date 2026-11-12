@@ -1,0 +1,8 @@
+name = "fireblocks-cloud"
+main = "src/index.ts"
+compatibility_date = "2024-11-01"
+
+# 一键脚本 setup.mjs 会自动创建 KV 并回填下面的 id
+[[kv_namespaces]]
+binding = "FB_KV"
+id = "REPLACE_WITH_YOUR_KV_ID"
