@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { RoomClient, makeRoomCode } from '../net/room';
-import type { PeerInfo, RoomTransport } from '../net/room';
+import type { PeerInfo, RoomTransport, RoomVia } from '../net/room';
 import { WsRoomClient } from '../net/wsroom';
+import { getApiBase } from '../services/cloud';
 import { audio } from '../game/audio';
 import { toastStore, useProfile } from '../store';
 
@@ -33,20 +34,26 @@ function defaultLanAddr(): string {
   return '';
 }
 
+function defaultVia(initialLan?: string): RoomVia {
+  if (initialLan) return 'lan';
+  if (location.port === '8788') return 'lan';
+  if (location.protocol === 'https:' && getApiBase()) return 'online';
+  return 'window';
+}
+
 const CODE_RE = /^[A-Z0-9]{3,8}$/;
 const isInvite = (t: string) => /[?&]room=/.test(t) || /^https?:\/\//i.test(t.trim());
 
-export default function RoomLobby({ onCancel, onStart, initialCode, autoJoin, initialLan }: {
+export default function RoomLobby({ onCancel, onStart, initialCode, autoJoin, initialLan, initialVia }: {
   onCancel: () => void;
-  onStart: (client: RoomTransport, isHost: boolean, via: 'window' | 'lan') => void;
+  onStart: (client: RoomTransport, isHost: boolean, via: RoomVia) => void;
   initialCode?: string;
   autoJoin?: boolean;
   initialLan?: string;
+  initialVia?: RoomVia;
 }) {
   const p = useProfile();
-  const [transport, setTransport] = useState<'window' | 'lan'>(
-    initialLan || location.port === '8788' ? 'lan' : 'window'
-  );
+  const [transport, setTransport] = useState<RoomVia>(initialVia ?? defaultVia(initialLan));
   const [lanAddr, setLanAddr] = useState(initialLan ?? defaultLanAddr());
   const [tab, setTab] = useState<'create' | 'join'>(autoJoin ? 'join' : 'create');
   const [code, setCode] = useState(initialCode ?? '');
@@ -58,12 +65,13 @@ export default function RoomLobby({ onCancel, onStart, initialCode, autoJoin, in
   const startedRef = useRef(false);
 
   const me: PeerInfo = { name: p.name, avatar: p.avatar, rating: p.rating };
+  const onlineReady = !!getApiBase();
 
   useEffect(() => () => {
     if (!startedRef.current) clientRef.current?.close();
   }, []);
 
-  const bind = (client: RoomTransport, isHost: boolean, via: 'window' | 'lan') => {
+  const bind = (client: RoomTransport, isHost: boolean, via: RoomVia) => {
     clientRef.current = client;
     client.onPeer = (peer) => {
       if (startedRef.current) return;
@@ -73,48 +81,68 @@ export default function RoomLobby({ onCancel, onStart, initialCode, autoJoin, in
       onStart(client, isHost, via);
     };
     client.onLeave = () => {
-      if (!startedRef.current) {
-        toastStore.push('对方已离开房间', '⚠️', 'warn');
-        setWaiting(false);
-        setCreated(null);
-        clientRef.current = null;
-      }
+      if (startedRef.current) return;
+      clientRef.current = null;
+      setWaiting(false);
+      setCreated(null);
+      setHint('连接已断开或房间不可用，请重试');
     };
   };
 
-  const makeClient = (c: string, isHost: boolean, tr: 'window' | 'lan', addr: string): RoomTransport | null => {
-    if (tr === 'lan') {
-      const a = addr.trim();
-      if (!a) { toastStore.push('请先填写局域网服务地址', '⚠️', 'warn'); return null; }
-      return new WsRoomClient(a, c, isHost, me, (msg) => {
-        setHint(msg);
-        toastStore.push(msg, '⚠️', 'warn');
-      });
+  const makeClient = (c: string, isHost: boolean, tr: RoomVia, addr: string): RoomTransport | null => {
+    const onError = (msg: string) => {
+      setHint(msg);
+      toastStore.push(msg, '⚠️', 'warn');
+    };
+    try {
+      if (tr === 'lan') {
+        const a = addr.trim();
+        if (!a) { toastStore.push('请先填写局域网服务地址', '⚠️', 'warn'); return null; }
+        return new WsRoomClient(a, c, isHost, me, onError, 'lan');
+      }
+      if (tr === 'online') {
+        const base = getApiBase();
+        if (!base) { toastStore.push('当前页面未配置云端服务，无法使用在线房间', '⚠️', 'warn'); return null; }
+        if (location.protocol === 'https:' && !base.startsWith('https:')) {
+          toastStore.push('HTTPS 页面只能连接 wss:// 房间服务', '⚠️', 'warn');
+          return null;
+        }
+        return new WsRoomClient(base, c, isHost, me, onError, 'online');
+      }
+      return new RoomClient(c, isHost, me);
+    } catch (err) {
+      onError(`无法创建房间：${String(err).slice(0, 80)}`);
+      return null;
     }
-    return new RoomClient(c, isHost, me);
   };
 
   const create = () => {
     audio.click();
-    const custom = customCode.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
-    if (custom && !CODE_RE.test(custom)) { toastStore.push('房间号需为 3–8 位字母或数字', '⚠️', 'warn'); return; }
-    const c = custom || makeRoomCode();
-    const client = makeClient(c, true, transport, lanAddr);
-    if (!client) return;
-    bind(client, true, transport);
-    setCreated(c);
-    setWaiting(true);
-    setHint('');
-    if (transport === 'lan') {
-      setTimeout(() => {
-        if (clientRef.current === client && !client.peer) {
-          setHint('等待其他设备加入：请确认主机已运行 lan-play.bat，且地址正确。');
-        }
-      }, 8000);
+    try {
+      const custom = customCode.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+      if (custom && !CODE_RE.test(custom)) { toastStore.push('房间号需为 3–8 位字母或数字', '⚠️', 'warn'); return; }
+      const c = custom || makeRoomCode();
+      const client = makeClient(c, true, transport, lanAddr);
+      if (!client) return;
+      bind(client, true, transport);
+      setCreated(c);
+      setWaiting(true);
+      setHint('');
+      if (transport !== 'window') {
+        setTimeout(() => {
+          if (clientRef.current === client && !client.peer) {
+            setHint(transport === 'online'
+              ? '还没连上：请确认网络正常；若刚更新部署，稍等几秒重试。'
+              : '等待其他设备加入：请确认主机已运行 lan-play.bat，且地址正确。');
+          }
+        }, 8000);
+      }
+    } catch (err) {
+      toastStore.push(`创建房间失败：${String(err).slice(0, 80)}`, '⚠️', 'warn');
     }
   };
 
-  const joinWith = (raw: string, tr: 'window' | 'lan', addr: string) => {
+  const joinWith = (raw: string, tr: RoomVia, addr: string) => {
     const c = raw.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
     if (!CODE_RE.test(c)) { toastStore.push('请输入 3–8 位房间号，或粘贴邀请链接', '⚠️', 'warn'); return; }
     audio.click();
@@ -125,34 +153,39 @@ export default function RoomLobby({ onCancel, onStart, initialCode, autoJoin, in
     setTransport(tr);
     setWaiting(true);
     setHint('');
-    setTimeout(() => {
-      if (clientRef.current === client && !client.peer) {
-        setHint(tr === 'lan'
-          ? '还没连上：请确认主机已运行 lan-play.bat 并创建了该房间，地址与端口正确。'
-          : '还没连上：请确认另一个窗口已创建该房间，且在同一浏览器内。');
-      }
-    }, 8000);
+    if (tr !== 'window') {
+      setTimeout(() => {
+        if (clientRef.current === client && !client.peer) {
+          setHint(tr === 'online'
+            ? '还没连上：请确认房间号正确、主机仍在等待，且网络正常。'
+            : '还没连上：请确认主机已运行 lan-play.bat 并创建了该房间，地址与端口正确。');
+        }
+      }, 8000);
+    }
   };
 
   const join = () => joinWith(code, transport, lanAddr);
 
-  // 粘贴邀请链接：?room=CODE 走同机窗口，?room=CODE&lan=ws://... 走局域网
+  // 粘贴邀请链接：?room=CODE&via=online 走云端，?room=CODE&lan=ws://... 走局域网，其余走同机窗口
   const pasteJoin = (text: string) => {
     let room = '';
     let lan: string | undefined;
+    let via: string | null = null;
     try {
       const u = new URL(text.trim(), location.href);
       room = u.searchParams.get('room') ?? '';
       lan = u.searchParams.get('lan') ?? undefined;
+      via = u.searchParams.get('via');
     } catch { /* 解析失败按非法输入处理 */ }
     if (!room) { toastStore.push('链接里没有找到房间号', '⚠️', 'warn'); return; }
     if (lan) { setLanAddr(lan); joinWith(room, 'lan', lan); }
+    else if (via === 'online') joinWith(room, 'online', lanAddr);
     else joinWith(room, 'window', lanAddr);
   };
 
   useEffect(() => {
     if (autoJoin && initialCode && CODE_RE.test(initialCode.toUpperCase())) {
-      const t = setTimeout(() => joinWith(initialCode, transport, initialLan ?? lanAddr), 300);
+      const t = setTimeout(() => joinWith(initialCode, initialVia ?? defaultVia(initialLan), initialLan ?? lanAddr), 300);
       return () => clearTimeout(t);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -167,25 +200,37 @@ export default function RoomLobby({ onCancel, onStart, initialCode, autoJoin, in
   const lanHttp = lanAddr.trim().replace(/^ws/, 'http').replace(/\/+$/, '');
   const origin = location.protocol === 'file:' ? '' : `${location.origin}${location.pathname}`;
   const roomLink = created
-    ? transport === 'lan'
-      ? `${lanHttp}/?room=${created}&lan=${encodeURIComponent(lanAddr.trim())}`
-      : `${origin}?room=${created}`
+    ? transport === 'online'
+      ? `${origin}?room=${created}&via=online`
+      : transport === 'lan'
+        ? `${lanHttp}/?room=${created}&lan=${encodeURIComponent(lanAddr.trim())}`
+        : `${origin}?room=${created}`
     : '';
 
   return (
     <div className="screen room-screen">
       <div className="room-panel">
         <h2>
-          {transport === 'lan'
-            ? <>🌐 自定义房间 <small>局域网跨设备直连</small></>
-            : <>🪟 自定义房间 <small>同机多窗口直连</small></>}
+          {transport === 'online'
+            ? <>🌍 在线房间 <small>跨网络真实对战</small></>
+            : transport === 'lan'
+              ? <>🌐 自定义房间 <small>局域网跨设备直连</small></>
+              : <>🪟 自定义房间 <small>同机多窗口直连</small></>}
         </h2>
         <p className="room-desc">
-          {transport === 'lan' ? (
+          {transport === 'online' ? (
+            <>
+              双方打开同一个网址（无需处于同一网络），输入同一房间号即可真实对战：
+              互发垃圾行、同步棋盘、胜负判定。房间消息经云端 Worker 中继，打开即玩。
+            </>
+          ) : transport === 'lan' ? (
             <>
               在一台电脑上双击 <b>lan-play.bat</b> 启动局域网服务（自动托管游戏页面），
               同一 Wi-Fi 下的其他设备打开 <b>{lanHttp || 'http://主机IP:8788'}</b>，
               两边输入同一房间号即可跨设备真实对战：互发垃圾行、同步棋盘、胜负判定。
+              {location.protocol === 'https:' && (
+                <><br /><b>注意：</b>HTTPS 页面无法连接 ws:// 局域网地址，请改用「在线」房间，或用 http://主机IP:8788 打开局域网页面。</>
+              )}
             </>
           ) : (
             <>
@@ -197,8 +242,11 @@ export default function RoomLobby({ onCancel, onStart, initialCode, autoJoin, in
 
         {!waiting && (
           <div className="seg room-tabs">
-            <button className={transport === 'window' ? 'active' : ''} onClick={() => { audio.click(); setTransport('window'); }}>同机窗口</button>
+            {onlineReady && (
+              <button className={transport === 'online' ? 'active' : ''} onClick={() => { audio.click(); setTransport('online'); }}>在线</button>
+            )}
             <button className={transport === 'lan' ? 'active' : ''} onClick={() => { audio.click(); setTransport('lan'); }}>局域网</button>
+            <button className={transport === 'window' ? 'active' : ''} onClick={() => { audio.click(); setTransport('window'); }}>同机窗口</button>
           </div>
         )}
 
@@ -233,7 +281,11 @@ export default function RoomLobby({ onCancel, onStart, initialCode, autoJoin, in
             </label>
             <button className="btn btn-fire btn-lg" onClick={create}>＋ 创建房间</button>
             <p className="setting-hint">
-              {transport === 'lan' ? '创建后把邀请链接或房间号发给同一局域网内的其他设备。' : '创建后把房间号或邀请链接发给另一个窗口。'}
+              {transport === 'online'
+                ? '创建后把邀请链接或房间号发给对方，对方打开链接即可加入。'
+                : transport === 'lan'
+                  ? '创建后把邀请链接或房间号发给同一局域网内的其他设备。'
+                  : '创建后把房间号或邀请链接发给另一个窗口。'}
             </p>
           </div>
         )}
@@ -282,6 +334,9 @@ export default function RoomLobby({ onCancel, onStart, initialCode, autoJoin, in
                 {location.protocol === 'file:' && transport === 'window' && (
                   <p className="room-hint">离线单文件模式无法用链接跨窗口加入，请用静态服务或局域网模式。</p>
                 )}
+                {transport === 'online' && (
+                  <p className="room-hint">邀请链接在任意网络下均可打开；也可以把房间号发给对方手动输入。</p>
+                )}
                 {transport === 'lan' && (
                   <p className="setting-hint">
                     其他设备：打开 {lanHttp} → 自定义房间 → 局域网 → 输入房间号 {created}。
@@ -292,7 +347,7 @@ export default function RoomLobby({ onCancel, onStart, initialCode, autoJoin, in
             {!created && <div className="room-code">加入 {code.toUpperCase()}</div>}
             <div className="waiting-line"><span className="spinner" /> 等待对手接入…</div>
             {hint && <p className="room-hint">{hint}</p>}
-            <button className="btn btn-ghost" onClick={() => { clientRef.current?.close(); clientRef.current = null; setWaiting(false); setCreated(null); }}>取消</button>
+            <button className="btn btn-ghost" onClick={() => { clientRef.current?.close(); clientRef.current = null; setWaiting(false); setCreated(null); setHint(''); }}>取消</button>
           </div>
         )}
 

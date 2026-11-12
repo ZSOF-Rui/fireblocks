@@ -1,5 +1,6 @@
 export interface Env {
   FB_KV: KVNamespace;
+  ROOM: DurableObjectNamespace;
 }
 
 interface Entry {
@@ -201,6 +202,55 @@ async function handleMatch(env: Env, url: URL): Promise<Response> {
   return json({ name, avatar, rating: r, title });
 }
 
+const ROOM_CODE_RE = /^[A-Z0-9]{3,8}$/;
+
+// 在线房间：每个房间号一个 Durable Object，只做双向消息中继
+export class Room {
+  constructor(private state: DurableObjectState) {}
+
+  async fetch(request: Request): Promise<Response> {
+    const role = new URL(request.url).searchParams.get('role');
+    if (role !== 'host' && role !== 'guest') return new Response('bad role', { status: 400 });
+    if (request.headers.get('Upgrade')?.toLowerCase() !== 'websocket') {
+      return new Response('expected websocket', { status: 426 });
+    }
+
+    const pair = new WebSocketPair();
+    const client = pair[0];
+    const server = pair[1];
+    this.state.acceptWebSocket(server, [role]);
+
+    if (role === 'host' && this.state.getWebSockets('host').length > 1) {
+      server.send(JSON.stringify({ t: 'err', msg: '房间号已被占用，请重新创建' }));
+      server.close(4001, 'occupied');
+    } else if (role === 'guest' && this.state.getWebSockets('guest').length > 1) {
+      server.send(JSON.stringify({ t: 'err', msg: '房间已满' }));
+      server.close(4002, 'full');
+    }
+    return new Response(null, { status: 101, webSocket: client });
+  }
+
+  async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer) {
+    const [role] = this.state.getTags(ws);
+    if (!role) return;
+    this.sendTo(role === 'host' ? 'guest' : 'host', message);
+  }
+
+  // code >= 4000 是本端主动拒绝的连接，不能因此通知对面离开
+  async webSocketClose(ws: WebSocket, code: number) {
+    if (code >= 4000) return;
+    const [role] = this.state.getTags(ws);
+    if (!role) return;
+    this.sendTo(role === 'host' ? 'guest' : 'host', JSON.stringify({ t: 'bye' }));
+  }
+
+  private sendTo(role: string, data: string | ArrayBuffer) {
+    for (const ws of this.state.getWebSockets(role)) {
+      try { ws.send(data); } catch { /* socket already closed */ }
+    }
+  }
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
@@ -208,7 +258,15 @@ export default {
 
     try {
       if (url.pathname === '/' ) {
-        return json({ name: 'FireBlocks Cloud', ok: true, endpoints: ['/api/stats', '/api/visit', '/api/leaderboard', '/api/match'] });
+        return json({ name: 'FireBlocks Cloud', ok: true, endpoints: ['/api/stats', '/api/visit', '/api/leaderboard', '/api/match', '/room'] });
+      }
+      if (url.pathname === '/room') {
+        const code = (url.searchParams.get('code') ?? '').toUpperCase();
+        const role = url.searchParams.get('role') ?? '';
+        if (!ROOM_CODE_RE.test(code) || (role !== 'host' && role !== 'guest')) {
+          return new Response('bad room params', { status: 400, headers: CORS });
+        }
+        return env.ROOM.get(env.ROOM.idFromName(code)).fetch(request);
       }
       if (url.pathname === '/api/stats' && request.method === 'GET') return handleStats(env);
       if (url.pathname === '/api/visit' && request.method === 'POST') {

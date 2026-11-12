@@ -1,6 +1,6 @@
 # 🔥 炎块 FireBlocks
 
-一个以「火焰」为主题、按现代俄罗斯方块 Guideline 细则实现的网页方块游戏。纯前端即可完整游玩，可选一键部署 Cloudflare Worker 获得真实云端排行榜、访问量统计与匹配池。
+一个以「火焰」为主题、按现代俄罗斯方块 Guideline 细则实现的网页方块游戏。纯前端即可完整游玩，可选一键部署 Cloudflare Worker 获得真实云端排行榜、访问量统计、匹配池与跨网络在线房间。
 
 **MIT 开源** · 仓库：<https://github.com/ZSOF-Rui/fireblocks> · 在线演示（GitHub Pages）：<https://ZSOF-Rui.github.io/fireblocks/>
 
@@ -12,7 +12,7 @@
 
 - **标准细则引擎**：SRS 旋转 + 完整踢墙表、7-Bag 随机器、Hold 暂存、幽灵投影、500ms 锁定延迟（15 次移动重置）、DAS/ARR 手感调节、T-Spin（含 Mini）判定、Back-to-Back、Combo、Perfect Clear、官方重力曲线（最高 20 级）。
 - **原创 FEVER 狂热系统**：消行 / T 旋 / 四消 / 连击积攒热量，满 100 进入 12 秒狂热——得分 ×2、攻击 +2、画面与音乐同步升温。
-- **六种模式**：无尽马拉松、40 行竞速、每日挑战（全球同种子）、在线匹配 PK（Elo 天梯）、本地双人同屏、自定义房间（自设房间号，复制链接或输码加入，同机多窗口 / 局域网跨设备实时对战）。
+- **六种模式**：无尽马拉松、40 行竞速、每日挑战（全球同种子）、在线匹配 PK（Elo 天梯）、本地双人同屏、自定义房间（自设房间号，复制链接或输码加入；支持跨网络在线、局域网跨设备、同机多窗口三种真实联机方式）。
 - **对战攻击规则**：消行攻击、T 旋攻击、B2B 加成、Combo 攻击、PC +10、FEVER +2，攻击先抵消自身待收垃圾，垃圾行同批同孔。
 - **排行榜**：今日 / 本周 / 本月 / 总榜四档，按玩家本地时区切分周期；未配置云端时为本地模拟服务（界面有明确标识），配置后无缝切换真实云端。
 - **访问量监测**：累计访问、今日访问、独立访客、当前在线，主页与排行榜页实时展示。
@@ -104,9 +104,20 @@ npm run preview # 本地预览生产构建
 | 每日挑战 | 以当天日期为种子，所有玩家拿到完全相同的方块序列，每日刷新，只计今日榜。 |
 | 在线匹配 | 雷达扫描匹配对手 → 三局两胜式单局 PK，Elo 天梯分（K=28）。对手由本地 AI 驱动（强度随天梯分自适应）；配置云端后，匹配池会优先返回真实玩家档案。 |
 | 本地双人 | 同屏分键盘对战，互相发送垃圾行，先被顶出者败。 |
-| 自定义房间 | 创建时可自设 3–8 位房间号（留空自动生成），等待页给出邀请链接与房号；对方打开链接或输入房号加入，加入页也可直接粘贴邀请链接自动解析。**同机窗口**走 BroadcastChannel（零服务器）；**局域网**走 WebSocket 中继，同一 Wi-Fi 下手机 / 电脑跨设备真实联机。支持邀请链接 `?room=CODE`（局域网另带 `&lan=地址`）、断线判胜与再来一局。 |
+| 自定义房间 | 创建时可自设 3–8 位房间号（留空自动生成），等待页给出邀请链接与房号；对方打开链接或输入房号加入，加入页也可直接粘贴邀请链接自动解析。**在线**走 Cloudflare Durable Object 的 wss 中继，双方无需同一网络，公共网页版默认使用；**局域网**走 WebSocket 中继，同一 Wi-Fi 下跨设备真实联机；**同机窗口**走 BroadcastChannel（零服务器）。支持邀请链接 `?room=CODE`（在线带 `&via=online`，局域网带 `&lan=地址`）、断线判胜与再来一局。 |
 
-> 说明：自定义房间的「同机窗口」基于 BroadcastChannel，限同设备同浏览器；「局域网」由 `lan/server.mjs` 提供 WebSocket 中继（默认端口 8788），见下文「局域网联机」。匹配 PK 的云端匹配池提供真实玩家档案，对局操作由 AI 模拟。
+> 说明：自定义房间的「同机窗口」基于 BroadcastChannel，限同设备同浏览器；「在线」由已部署的 Worker 中继（`/room`，Durable Object），跨网络可用；「局域网」由 `lan/server.mjs` 提供 WebSocket 中继（默认端口 8788），见下文。HTTPS 页面无法连接 `ws://` 局域网地址（混合内容拦截），此时请使用「在线」房间。匹配 PK 的云端匹配池提供真实玩家档案，对局操作由 AI 模拟。
+
+---
+
+## 🌍 在线房间（跨网络真实对战）
+
+双方**不需要处在同一网络**：打开同一个网址，输入同一房间号即可真实对战（互发垃圾行、同步棋盘、断线判胜、再来一局）。
+
+- 公共网页版（HTTPS）在已配置 Worker 时**默认选中「在线」**；创建后把邀请链接（`?room=CODE&via=online`）或房间号发给对方，对方打开即自动加入。
+- 房间服务由 Worker 的 **Durable Object** 提供：每个房间号一个实例，只做双向消息中继，不落盘、不存储对局内容；房间号 3–8 位字母数字，重复创建 / 房间已满会明确提示。
+- 使用前需先部署 Worker（见下文「云端部署」）；本地开发想连云端中继时，在浏览器控制台执行 `localStorage.setItem('fb_api_base','https://你的worker地址')` 即可切换。
+- 访客先到、主机后到也没关系：客户端会重试握手；双方都加入后开始倒计时。
 
 ---
 
@@ -166,7 +177,7 @@ npm run preview # 本地预览生产构建
 
 ## ☁️ 云端部署（Cloudflare Worker，可选）
 
-不部署也能完整游玩（本地模拟服务）。部署后获得：**真实全球排行榜（日 / 周 / 月 / 总）、真实访问量与在线统计、真实玩家匹配池**。Cloudflare 免费额度（Workers 10 万请求/天 + KV 免费档）对个人站点绰绰有余。
+不部署也能完整游玩（本地模拟服务）。部署后获得：**真实全球排行榜（日 / 周 / 月 / 总）、真实访问量与在线统计、真实玩家匹配池、跨网络在线房间**。Cloudflare 免费额度（Workers 10 万请求/天 + KV 免费档 + SQLite Durable Objects 免费档）对个人站点绰绰有余。
 
 ### 一键部署
 
@@ -176,7 +187,7 @@ npm run preview # 本地预览生产构建
 bash deploy-cloud.sh
 ```
 
-脚本自动完成：安装 wrangler → 浏览器登录 Cloudflare → 创建 KV 命名空间并回填 `worker/wrangler.toml` → 部署 Worker → 把 `https://xxx.workers.dev` 地址写入 `public/config.js`（若存在 `dist/` 也同步写入）→ 连通性自检。
+脚本自动完成：安装 wrangler → 浏览器登录 Cloudflare → 创建 KV 命名空间并回填 `worker/wrangler.toml` → 部署 Worker（同时自动创建在线房间所需的 Durable Object）→ 把 `https://xxx.workers.dev` 地址写入 `public/config.js`（若存在 `dist/` 也同步写入）→ 连通性自检。
 
 ### 手动部署
 
@@ -187,6 +198,8 @@ npx wrangler login
 npx wrangler kv namespace create FB_KV   # 把输出的 id 填入 wrangler.toml
 npx wrangler deploy                      # 得到 https://fireblocks-cloud.<子域>.workers.dev
 ```
+
+`wrangler.toml` 已包含 `ROOM` Durable Object 绑定与 `new_sqlite_classes` 迁移，`wrangler deploy` 会自动创建，无需额外操作；`/room` 即 wss 房间中继入口。
 
 然后编辑前端 `public/config.js`（或分发版 `dist/config.js`）：
 
@@ -248,7 +261,7 @@ FireBlocks/
 ├─ src/
 │  ├─ game/              # 引擎：constants / rng / engine / input / bot / audio / renderer
 │  ├─ net/room.ts        # BroadcastChannel 房间协议（同机窗口）
-│  ├─ net/wsroom.ts      # WebSocket 房间客户端（局域网跨设备）
+│  ├─ net/wsroom.ts      # WebSocket 房间客户端（在线 / 局域网）
 │  ├─ services/cloud.ts  # 云/本地双通道：榜单、匹配、访问统计
 │  ├─ components/        # Home / GameScreen / Leaderboard / Matchmaking / RoomLobby / Modals / Nav / …
 │  ├─ store.ts           # localStorage 状态（设置/档案/提示）
@@ -257,8 +270,8 @@ FireBlocks/
 │  ├─ server.mjs         # 局域网服务：静态托管 dist/ + WebSocket 房间中继
 │  └─ package.json       # ws 依赖
 └─ worker/
-   ├─ src/index.ts       # Cloudflare Worker API（KV 榜单/统计/匹配池）
-   ├─ wrangler.toml      # KV 绑定（setup 自动回填 id）
+   ├─ src/index.ts       # Cloudflare Worker API（KV 榜单/统计/匹配池 + Room 在线房间中继）
+   ├─ wrangler.toml      # KV 绑定 + ROOM Durable Object（setup 自动回填 KV id）
    └─ setup.mjs          # 一键部署脚本
 ```
 
@@ -270,7 +283,7 @@ FireBlocks/
 A：是本地模拟服务，界面会明确标注「本地模拟」。游戏本体（引擎、对战、双人、房间）完全真实可玩；部署 Worker 后榜单与统计即为真实云端数据。
 
 **Q：自定义房间能跨电脑 / 手机吗？**
-A：能。选「局域网」传输：主机双击 `lan-play.bat` 启动中继服务，同一 Wi-Fi 下的其他设备打开主机局域网地址、输入同一房间号或粘贴邀请链接即可真实跨设备对战（见「局域网联机」）。选「同机窗口」则限同设备多标签页（BroadcastChannel，零服务器）。
+A：能，而且有两种方式。「在线」：双方打开同一个已部署 Worker 的网址（无需同一网络），输入同一房间号或打开邀请链接即可，消息经 wss 中继；公共网页版默认使用。「局域网」：主机双击 `lan-play.bat` 启动中继服务，同一 Wi-Fi 下的其他设备打开 `http://主机IP:8788` 加入（HTTPS 页面无法连接 `ws://`，所以不要从公网 HTTPS 页面上选局域网）。「同机窗口」则限同设备多标签页（BroadcastChannel，零服务器）。
 
 **Q：难度 / 速度调整会影响对战公平吗？**
 A：不会。起始等级与重力速度仅作用于单人模式（马拉松 / 竞速 / 每日）；所有对战模式（匹配 PK / 双人 / 窗口 / 局域网）统一使用标准速度，保证公平。
@@ -288,7 +301,7 @@ A：浏览器开发者工具 → Application → Local Storage，删除 `fb_` �
 
 ## 🛠️ 技术栈
 
-React 18 · TypeScript 5.6 · Vite 5 · Canvas 2D（精灵缓存 + 粒子系统）· WebAudio（全程序化合成）· BroadcastChannel（同机窗口）· WebSocket + Node `ws` 中继（局域网跨设备）· Cloudflare Workers + KV · 自托管字体 Orbitron / Rajdhani
+React 18 · TypeScript 5.6 · Vite 5 · Canvas 2D（精灵缓存 + 粒子系统）· WebAudio（全程序化合成）· BroadcastChannel（同机窗口）· WebSocket + Node `ws` 中继（局域网跨设备）· Cloudflare Workers + KV + Durable Objects（在线房间） · 自托管字体 Orbitron / Rajdhani
 
 ---
 

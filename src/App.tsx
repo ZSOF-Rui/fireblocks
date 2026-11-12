@@ -13,13 +13,14 @@ import { audio } from './game/audio';
 import { MODE_NAME, applyTheme } from './game/constants';
 import type { Mode } from './game/constants';
 import { cloud } from './services/cloud';
+import type { RoomVia } from './net/room';
 import { settingsStore, useSettings } from './store';
 
 type Screen =
   | { name: 'home' }
   | { name: 'ranking' }
   | { name: 'match' }
-  | { name: 'room'; initialCode?: string; autoJoin?: boolean; lan?: string }
+  | { name: 'room'; initialCode?: string; autoJoin?: boolean; lan?: string; via?: RoomVia }
   | { name: 'game'; config: GameConfig; runId: number };
 
 applyTheme(settingsStore.get().theme);
@@ -30,7 +31,14 @@ export default function App() {
     const params = new URLSearchParams(location.search);
     const room = params.get('room');
     if (room && /^[A-Za-z0-9]{3,8}$/.test(room)) {
-      return { name: 'room', initialCode: room.toUpperCase(), autoJoin: true, lan: params.get('lan') ?? undefined };
+      const via = params.get('via');
+      return {
+        name: 'room',
+        initialCode: room.toUpperCase(),
+        autoJoin: true,
+        lan: params.get('lan') ?? undefined,
+        via: via === 'online' || via === 'lan' || via === 'window' ? via : undefined,
+      };
     }
     return { name: 'home' };
   });
@@ -123,6 +131,7 @@ export default function App() {
             initialCode={screen.initialCode}
             autoJoin={screen.autoJoin}
             initialLan={screen.lan}
+            initialVia={screen.via}
             onCancel={() => setScreen({ name: 'home' })}
             onStart={(client, isHost, via) => startGame({ mode: 'net', room: { client, isHost, via }, seed: client.seed ?? undefined })}
           />

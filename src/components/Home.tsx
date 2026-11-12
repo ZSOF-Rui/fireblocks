@@ -85,7 +85,7 @@ const MODES: { mode: Mode | 'match' | 'room'; icon: string; title: string; desc:
   { mode: 'daily', icon: '📅', title: '每日挑战', desc: '今日全员同一套块序，公平决出最强', tag: '每日' },
   { mode: 'match', icon: '⚔️', title: '在线匹配 PK', desc: '按积分匹配对手，垃圾行互攻，胜负算分', tag: '在线', hot: true },
   { mode: 'local2p', icon: '👥', title: '本地双人', desc: '同一键盘分屏对战，面对面互相伤害', tag: '双人' },
-  { mode: 'room', icon: '🗺️', title: '自定义房间', desc: '自设房间号，复制链接或输码加入；同机窗口 / 局域网跨设备真实对战', tag: '真联机', hot: true },
+  { mode: 'room', icon: '🗺️', title: '自定义房间', desc: '自设房间号，复制链接或输码加入；在线 / 局域网 / 同机窗口真实对战', tag: '真联机', hot: true },
 ];
 
 export default function Home({ onPlay, onMatch, onRoom, onRanking, onHelp }: Props) {
@@ -94,7 +94,7 @@ export default function Home({ onPlay, onMatch, onRoom, onRanking, onHelp }: Pro
     <div className="screen home">
       <section className="home-hero">
         <div className="hero-text">
-          <div className="hero-badge">🔥 标准规则 · 原创狂热系统 · 四套主题 · 局域网联机</div>
+          <div className="hero-badge">🔥 标准规则 · 原创狂热系统 · 四套主题 · 在线联机</div>
           <h1 className="hero-logo">
             <FlameLogo size={64} />
             <span className="hero-logo-cn">炎块</span>
@@ -155,7 +155,7 @@ export default function Home({ onPlay, onMatch, onRoom, onRanking, onHelp }: Pro
         <VisitStats />
         <p className="home-footnote">
           {cloudStatus().mode === 'cloud'
-            ? '已连接云端 Worker：排行榜、访问量与匹配池为全站共享的真实数据；窗口 / 局域网对战为设备间真实直连。'
+            ? '已连接云端 Worker：排行榜、访问量与匹配池为全站共享的真实数据；自定义房间支持在线跨网络、局域网与同机窗口真实对战。'
             : '本地自定义榜单模式：排行榜与匹配对手由本地模拟服务提供（数据保存在浏览器）。在设置中填入 Cloudflare Worker 地址即可切换为全站共享云端数据（部署方法见 README）。'}
         </p>
       </section>

@@ -5,6 +5,8 @@ import type { PieceType } from '../game/constants';
 
 export interface PeerInfo { name: string; avatar: string; rating: number }
 
+export type RoomVia = 'window' | 'lan' | 'online';
+
 export interface RoomTransport {
   peer: PeerInfo | null;
   seed: number | null;

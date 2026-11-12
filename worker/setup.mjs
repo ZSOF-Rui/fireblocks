@@ -1,4 +1,4 @@
-// FireBlocks 云端一键部署脚本（Cloudflare Worker + KV）
+// FireBlocks 云端一键部署脚本（Cloudflare Worker + KV + Durable Objects）
 // 用法: node setup.mjs   （或双击根目录 deploy-cloud.bat / 运行 deploy-cloud.sh）
 import { spawn, spawnSync } from 'node:child_process';
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
@@ -174,6 +174,6 @@ try {
 console.log('\n==============================================');
 console.log(' 部署完成！');
 console.log(` 云端地址: ${apiBase}`);
-console.log(' 前端已自动指向该地址，排行榜/访问量/匹配池即刻生效。');
+console.log(' 前端已自动指向该地址，排行榜/访问量/匹配池/在线房间即刻生效。');
 console.log(' 本地开发: npm run dev   构建分发: npm run build');
 console.log('==============================================');

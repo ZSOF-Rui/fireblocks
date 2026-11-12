@@ -9,10 +9,19 @@ export class WsRoomClient implements RoomTransport {
   onError: ((msg: string) => void) | null = null;
   private ws: WebSocket;
   private closed = false;
+  private failed = false;
   private lastSeen = Date.now();
   private pingTimer: number;
+  private joinTimer: number | null = null;
 
-  constructor(public url: string, public code: string, public isHost: boolean, private me: PeerInfo, onError?: (msg: string) => void) {
+  constructor(
+    public url: string,
+    public code: string,
+    public isHost: boolean,
+    private me: PeerInfo,
+    onError?: (msg: string) => void,
+    private kind: 'lan' | 'online' = 'lan',
+  ) {
     this.onError = onError ?? null;
     const base = url.trim().replace(/\/+$/, '').replace(/^http/, 'ws');
     this.ws = new WebSocket(`${base}/room?code=${encodeURIComponent(code)}&role=${isHost ? 'host' : 'guest'}`);
@@ -23,8 +32,7 @@ export class WsRoomClient implements RoomTransport {
       try { m = JSON.parse(String(ev.data)); } catch { return; }
       this.lastSeen = Date.now();
       if (m.t === 'err') {
-        this.onError?.(m.msg ?? '连接失败');
-        this.onLeave?.();
+        this.fail(m.msg ?? '连接失败');
         return;
       }
       if (m.t === 'join' && this.isHost) {
@@ -35,6 +43,7 @@ export class WsRoomClient implements RoomTransport {
       } else if (m.t === 'welcome' && !this.isHost) {
         this.peer = m.me;
         this.seed = m.seed;
+        if (this.joinTimer !== null) { clearInterval(this.joinTimer); this.joinTimer = null; }
         this.onPeer?.(this.peer, this.seed);
       } else if (m.t === 'bye') {
         this.onLeave?.();
@@ -42,14 +51,33 @@ export class WsRoomClient implements RoomTransport {
         this.onMsg?.(m);
       }
     };
-    this.ws.onclose = () => { if (!this.closed) this.onLeave?.(); };
-    this.ws.onerror = () => {
-      if (!this.closed && !this.peer) this.onError?.('无法连接局域网服务：请确认主机已运行 lan-play.bat，地址与端口正确');
+    this.ws.onclose = () => {
+      if (this.closed) return;
+      if (this.peer) this.onLeave?.();
+      else this.fail(this.connectError());
     };
+    this.ws.onerror = () => { if (!this.peer) this.fail(this.connectError()); };
+    if (!this.isHost) {
+      // 主机可能晚于访客进入房间，重发 join 直到握手完成
+      this.joinTimer = window.setInterval(() => { if (!this.peer) this.raw({ t: 'join', me: this.me }); }, 1500);
+    }
     this.pingTimer = window.setInterval(() => {
       this.raw({ t: 'ping' });
       if (this.peer && Date.now() - this.lastSeen > 5000) this.onLeave?.();
     }, 1000);
+  }
+
+  private connectError(): string {
+    return this.kind === 'online'
+      ? '无法连接在线房间服务：请检查网络后重试'
+      : '无法连接局域网服务：请确认主机已运行 lan-play.bat，地址与端口正确';
+  }
+
+  private fail(msg: string) {
+    if (this.failed || this.closed) return;
+    this.failed = true;
+    this.onError?.(msg);
+    this.onLeave?.();
   }
 
   private raw(m: RoomMsg) {
@@ -62,6 +90,7 @@ export class WsRoomClient implements RoomTransport {
     if (this.closed) return;
     this.raw({ t: 'bye' });
     this.closed = true;
+    if (this.joinTimer !== null) clearInterval(this.joinTimer);
     clearInterval(this.pingTimer);
     this.ws.close();
   }

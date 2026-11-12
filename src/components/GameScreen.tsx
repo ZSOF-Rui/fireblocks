@@ -10,7 +10,7 @@ import { MODE_NAME, SPRINT_TARGET } from '../game/constants';
 import type { Mode } from '../game/constants';
 import { randomSeed, todaySeed } from '../game/rng';
 import { RemoteView, encodeBoard } from '../net/room';
-import type { RoomTransport, RoomMsg } from '../net/room';
+import type { RoomTransport, RoomMsg, RoomVia } from '../net/room';
 import type { BotOpponent } from '../services/cloud';
 import { cloud } from '../services/cloud';
 import { fmtNum, fmtTime, settingsStore, useSettings } from '../store';
@@ -19,7 +19,7 @@ import TouchControls from './TouchControls';
 export interface GameConfig {
   mode: Mode;
   bot?: BotOpponent;
-  room?: { client: RoomTransport; isHost: boolean; via?: 'window' | 'lan' };
+  room?: { client: RoomTransport; isHost: boolean; via?: RoomVia };
   seed?: number;
 }
 
@@ -592,7 +592,9 @@ export default function GameScreen({ config, onExit, onRematch, onOpenSettings, 
     <div className={`game-screen ${isVersus ? 'versus' : ''} ${touchOn && mode !== 'local2p' ? 'has-touch' : ''}`}>
       <div className="game-top">
         <span className="mode-badge">
-          {mode === 'net' ? (room?.via === 'lan' ? '局域网对战' : '窗口对战') : MODE_NAME[mode]}
+          {mode === 'net'
+            ? room?.via === 'lan' ? '局域网对战' : room?.via === 'online' ? '在线对战' : '窗口对战'
+            : MODE_NAME[mode]}
           {mode === 'daily' ? ` · ${todaySeed().slice(6)}` : ''}
           {isSolo && (settings.startLevel > 1 || settings.speedScale !== 1) ? ` · Lv${settings.startLevel}起 ${Math.round(settings.speedScale * 100)}%` : ''}
         </span>
