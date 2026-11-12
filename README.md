@@ -217,6 +217,12 @@ npx wrangler deploy                      # 得到 https://fireblocks-cloud.<子�
 window.FIREBLOCKS_CONFIG = { apiBase: "https://fireblocks-cloud.<你的子域>.workers.dev" };
 ```
 
+### 绑定自定义域名
+
+想用自有域名访问 Worker，要在 **Workers & Pages → 该 Worker → Settings → Domains & Routes → Add → Custom Domain** 中添加（例如 `worker.example.com`）。自定义域会自动创建 DNS 记录并签发证书；只添加「路由（Route）」不会为三级域名签发证书，`https://` 会握手失败。
+
+注意 Universal SSL 的 `*.example.com` 只覆盖一级子域：`worker.example.com` 可用，`worker.app.example.com` 需要 Custom Domain（或 Total TLS）。
+
 ### 启动连通性检测
 
 页面启动时自动对已配置的 Worker 地址做连通性检测（`GET /api/stats`，6 秒超时）：
