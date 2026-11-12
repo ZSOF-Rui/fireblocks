@@ -33,6 +33,9 @@ function defaultLanAddr(): string {
   return '';
 }
 
+const CODE_RE = /^[A-Z0-9]{3,8}$/;
+const isInvite = (t: string) => /[?&]room=/.test(t) || /^https?:\/\//i.test(t.trim());
+
 export default function RoomLobby({ onCancel, onStart, initialCode, autoJoin, initialLan }: {
   onCancel: () => void;
   onStart: (client: RoomTransport, isHost: boolean, via: 'window' | 'lan') => void;
@@ -41,10 +44,13 @@ export default function RoomLobby({ onCancel, onStart, initialCode, autoJoin, in
   initialLan?: string;
 }) {
   const p = useProfile();
-  const [transport, setTransport] = useState<'window' | 'lan'>(initialLan ? 'lan' : 'window');
+  const [transport, setTransport] = useState<'window' | 'lan'>(
+    initialLan || location.port === '8788' ? 'lan' : 'window'
+  );
   const [lanAddr, setLanAddr] = useState(initialLan ?? defaultLanAddr());
   const [tab, setTab] = useState<'create' | 'join'>(autoJoin ? 'join' : 'create');
   const [code, setCode] = useState(initialCode ?? '');
+  const [customCode, setCustomCode] = useState('');
   const [created, setCreated] = useState<string | null>(null);
   const [waiting, setWaiting] = useState(false);
   const [hint, setHint] = useState('');
@@ -57,14 +63,14 @@ export default function RoomLobby({ onCancel, onStart, initialCode, autoJoin, in
     if (!startedRef.current) clientRef.current?.close();
   }, []);
 
-  const bind = (client: RoomTransport, isHost: boolean) => {
+  const bind = (client: RoomTransport, isHost: boolean, via: 'window' | 'lan') => {
     clientRef.current = client;
     client.onPeer = (peer) => {
       if (startedRef.current) return;
       startedRef.current = true;
       audio.go();
       toastStore.push(`已连接 ${peer.avatar} ${peer.name}`, '🔗', 'success');
-      onStart(client, isHost, transport);
+      onStart(client, isHost, via);
     };
     client.onLeave = () => {
       if (!startedRef.current) {
@@ -76,21 +82,26 @@ export default function RoomLobby({ onCancel, onStart, initialCode, autoJoin, in
     };
   };
 
-  const makeClient = (c: string, isHost: boolean): RoomTransport | null => {
-    if (transport === 'lan') {
-      const addr = lanAddr.trim();
-      if (!addr) { toastStore.push('请先填写局域网服务地址', '⚠️', 'warn'); return null; }
-      return new WsRoomClient(addr, c, isHost, me, (msg) => setHint(msg));
+  const makeClient = (c: string, isHost: boolean, tr: 'window' | 'lan', addr: string): RoomTransport | null => {
+    if (tr === 'lan') {
+      const a = addr.trim();
+      if (!a) { toastStore.push('请先填写局域网服务地址', '⚠️', 'warn'); return null; }
+      return new WsRoomClient(a, c, isHost, me, (msg) => {
+        setHint(msg);
+        toastStore.push(msg, '⚠️', 'warn');
+      });
     }
     return new RoomClient(c, isHost, me);
   };
 
   const create = () => {
     audio.click();
-    const c = makeRoomCode();
-    const client = makeClient(c, true);
+    const custom = customCode.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+    if (custom && !CODE_RE.test(custom)) { toastStore.push('房间号需为 3–8 位字母或数字', '⚠️', 'warn'); return; }
+    const c = custom || makeRoomCode();
+    const client = makeClient(c, true, transport, lanAddr);
     if (!client) return;
-    bind(client, true);
+    bind(client, true, transport);
     setCreated(c);
     setWaiting(true);
     setHint('');
@@ -103,27 +114,45 @@ export default function RoomLobby({ onCancel, onStart, initialCode, autoJoin, in
     }
   };
 
-  const join = () => {
-    const c = code.trim().toUpperCase();
-    if (c.length !== 4) { toastStore.push('请输入 4 位房间号', '⚠️', 'warn'); return; }
+  const joinWith = (raw: string, tr: 'window' | 'lan', addr: string) => {
+    const c = raw.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+    if (!CODE_RE.test(c)) { toastStore.push('请输入 3–8 位房间号，或粘贴邀请链接', '⚠️', 'warn'); return; }
     audio.click();
-    const client = makeClient(c, false);
+    const client = makeClient(c, false, tr, addr);
     if (!client) return;
-    bind(client, false);
+    bind(client, false, tr);
+    setCode(c);
+    setTransport(tr);
     setWaiting(true);
     setHint('');
     setTimeout(() => {
       if (clientRef.current === client && !client.peer) {
-        setHint(transport === 'lan'
+        setHint(tr === 'lan'
           ? '还没连上：请确认主机已运行 lan-play.bat 并创建了该房间，地址与端口正确。'
           : '还没连上：请确认另一个窗口已创建该房间，且在同一浏览器内。');
       }
     }, 8000);
   };
 
+  const join = () => joinWith(code, transport, lanAddr);
+
+  // 粘贴邀请链接：?room=CODE 走同机窗口，?room=CODE&lan=ws://... 走局域网
+  const pasteJoin = (text: string) => {
+    let room = '';
+    let lan: string | undefined;
+    try {
+      const u = new URL(text.trim(), location.href);
+      room = u.searchParams.get('room') ?? '';
+      lan = u.searchParams.get('lan') ?? undefined;
+    } catch { /* 解析失败按非法输入处理 */ }
+    if (!room) { toastStore.push('链接里没有找到房间号', '⚠️', 'warn'); return; }
+    if (lan) { setLanAddr(lan); joinWith(room, 'lan', lan); }
+    else joinWith(room, 'window', lanAddr);
+  };
+
   useEffect(() => {
-    if (autoJoin && initialCode && initialCode.length === 4) {
-      const t = setTimeout(() => join(), 300);
+    if (autoJoin && initialCode && CODE_RE.test(initialCode.toUpperCase())) {
+      const t = setTimeout(() => joinWith(initialCode, transport, initialLan ?? lanAddr), 300);
       return () => clearTimeout(t);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -136,10 +165,11 @@ export default function RoomLobby({ onCancel, onStart, initialCode, autoJoin, in
   };
 
   const lanHttp = lanAddr.trim().replace(/^ws/, 'http').replace(/\/+$/, '');
+  const origin = location.protocol === 'file:' ? '' : `${location.origin}${location.pathname}`;
   const roomLink = created
     ? transport === 'lan'
       ? `${lanHttp}/?room=${created}&lan=${encodeURIComponent(lanAddr.trim())}`
-      : `${location.origin}${location.pathname}?room=${created}`
+      : `${origin}?room=${created}`
     : '';
 
   return (
@@ -147,8 +177,8 @@ export default function RoomLobby({ onCancel, onStart, initialCode, autoJoin, in
       <div className="room-panel">
         <h2>
           {transport === 'lan'
-            ? <>🌐 局域网对战 <small>WebSocket 跨设备直连</small></>
-            : <>🪟 窗口对战 <small>BroadcastChannel 真实直连</small></>}
+            ? <>🌐 自定义房间 <small>局域网跨设备直连</small></>
+            : <>🪟 自定义房间 <small>同机多窗口直连</small></>}
         </h2>
         <p className="room-desc">
           {transport === 'lan' ? (
@@ -192,9 +222,18 @@ export default function RoomLobby({ onCancel, onStart, initialCode, autoJoin, in
 
         {!waiting && tab === 'create' && (
           <div className="room-body">
-            <button className="btn btn-fire btn-lg" onClick={create}>＋ 创建我的房间</button>
+            <label className="field room-addr">
+              <span>自定义房间号（可选 · 3–8 位字母数字）</span>
+              <input
+                value={customCode}
+                maxLength={8}
+                placeholder="留空自动生成，如 FIRE88"
+                onChange={(e) => setCustomCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))}
+              />
+            </label>
+            <button className="btn btn-fire btn-lg" onClick={create}>＋ 创建房间</button>
             <p className="setting-hint">
-              {transport === 'lan' ? '创建后把邀请链接发给同一局域网内的其他设备。' : '创建后把房间号或链接发给另一个窗口。'}
+              {transport === 'lan' ? '创建后把邀请链接或房间号发给同一局域网内的其他设备。' : '创建后把房间号或邀请链接发给另一个窗口。'}
             </p>
           </div>
         )}
@@ -204,12 +243,17 @@ export default function RoomLobby({ onCancel, onStart, initialCode, autoJoin, in
             <input
               className="room-input"
               value={code}
-              maxLength={4}
+              maxLength={8}
               placeholder="房间号"
               onChange={(e) => setCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))}
               onKeyDown={(e) => { if (e.key === 'Enter') join(); }}
+              onPaste={(e) => {
+                const txt = e.clipboardData.getData('text');
+                if (isInvite(txt)) { e.preventDefault(); pasteJoin(txt); }
+              }}
             />
             <button className="btn btn-primary btn-lg" onClick={join}>加入对战</button>
+            <p className="setting-hint">输入房间号，或直接粘贴别人分享的邀请链接自动加入。</p>
           </div>
         )}
 
@@ -217,7 +261,7 @@ export default function RoomLobby({ onCancel, onStart, initialCode, autoJoin, in
           <div className="room-waiting">
             {created && (
               <>
-                <div className="room-code">{created}</div>
+                <div className={`room-code ${created.length > 4 ? 'room-code-sm' : ''}`}>{created}</div>
                 <div className="cta-row center">
                   <button className="btn btn-ghost" onClick={async () => {
                     toastStore.push(await copyText(created) ? '房间号已复制' : '复制失败，请手动记录', '📋');
@@ -226,9 +270,21 @@ export default function RoomLobby({ onCancel, onStart, initialCode, autoJoin, in
                     toastStore.push(await copyText(roomLink) ? '邀请链接已复制' : '复制失败', '🔗');
                   }}>复制邀请链接</button>
                 </div>
+                <p className="setting-hint" style={{ textAlign: 'center', margin: 0 }}>
+                  邀请链接（对方打开即自动加入，或粘贴到「加入房间」）
+                </p>
+                <input
+                  className="room-link"
+                  readOnly
+                  value={roomLink}
+                  onFocus={(e) => e.currentTarget.select()}
+                />
+                {location.protocol === 'file:' && transport === 'window' && (
+                  <p className="room-hint">离线单文件模式无法用链接跨窗口加入，请用静态服务或局域网模式。</p>
+                )}
                 {transport === 'lan' && (
                   <p className="setting-hint">
-                    其他设备：打开 {lanHttp} → 实时对战 → 局域网 → 输入房间号 {created}。
+                    其他设备：打开 {lanHttp} → 自定义房间 → 局域网 → 输入房间号 {created}。
                   </p>
                 )}
               </>

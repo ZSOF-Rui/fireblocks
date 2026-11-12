@@ -29,7 +29,7 @@ export default function App() {
   const [screen, setScreen] = useState<Screen>(() => {
     const params = new URLSearchParams(location.search);
     const room = params.get('room');
-    if (room && /^[A-Za-z0-9]{4}$/.test(room)) {
+    if (room && /^[A-Za-z0-9]{3,8}$/.test(room)) {
       return { name: 'room', initialCode: room.toUpperCase(), autoJoin: true, lan: params.get('lan') ?? undefined };
     }
     return { name: 'home' };

@@ -50,7 +50,7 @@ server.on('upgrade', (req, socket, head) => {
   wss.handleUpgrade(req, socket, head, (ws) => {
     const code = (url.searchParams.get('code') || '').toUpperCase();
     const role = url.searchParams.get('role');
-    if (!/^[A-Z0-9]{4}$/.test(code) || (role !== 'host' && role !== 'guest')) {
+    if (!/^[A-Z0-9]{3,8}$/.test(code) || (role !== 'host' && role !== 'guest')) {
       ws.send(JSON.stringify({ t: 'err', msg: '无效的房间号' }));
       ws.close();
       return;

@@ -85,7 +85,7 @@ const MODES: { mode: Mode | 'match' | 'room'; icon: string; title: string; desc:
   { mode: 'daily', icon: '📅', title: '每日挑战', desc: '今日全员同一套块序，公平决出最强', tag: '每日' },
   { mode: 'match', icon: '⚔️', title: '在线匹配 PK', desc: '按积分匹配对手，垃圾行互攻，胜负算分', tag: '在线', hot: true },
   { mode: 'local2p', icon: '👥', title: '本地双人', desc: '同一键盘分屏对战，面对面互相伤害', tag: '双人' },
-  { mode: 'room', icon: '🌐', title: '窗口 / 局域网对战', desc: '同机双窗口零服务器，或局域网跨设备真实联机', tag: '真联机', hot: true },
+  { mode: 'room', icon: '🗺️', title: '自定义房间', desc: '自设房间号，复制链接或输码加入；同机窗口 / 局域网跨设备真实对战', tag: '真联机', hot: true },
 ];
 
 export default function Home({ onPlay, onMatch, onRoom, onRanking, onHelp }: Props) {
