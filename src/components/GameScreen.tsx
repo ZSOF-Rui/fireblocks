@@ -13,7 +13,7 @@ import { RemoteView, encodeBoard } from '../net/room';
 import type { RoomTransport, RoomMsg, RoomVia } from '../net/room';
 import type { BotOpponent } from '../services/cloud';
 import { cloud } from '../services/cloud';
-import { fmtNum, fmtTime, settingsStore, useSettings } from '../store';
+import { fmtNum, fmtTime, settingsStore, toastStore, useSettings } from '../store';
 import TouchControls from './TouchControls';
 
 export interface GameConfig {
@@ -150,6 +150,10 @@ export default function GameScreen({ config, onExit, onRematch, onOpenSettings, 
     base.disconnected = disconnected;
     if (isNet) {
       if (side === 'p1') { sendState(); room?.client.send({ t: 'over' }); }
+      if (room?.via === 'online') {
+        const oppRating = room.client.peer?.rating ?? remoteRef.current?.rating ?? 1000;
+        base.ratingDelta = cloud.applyVsResult(winner === 'p1', oppRating);
+      }
       if (winner === 'p1') audio.win(); else audio.over();
     } else if (mode === 'vs-ai' && botInfo) {
       const win = winner === 'p1';
@@ -222,6 +226,15 @@ export default function GameScreen({ config, onExit, onRematch, onOpenSettings, 
         rv.rating = room.client.peer.rating;
       }
       remoteRef.current = rv;
+      // 匹配成功后双方各自进房，若 20 秒还没有对手握手则视为对局失败
+      if (room?.via === 'online') {
+        later(() => {
+          if (!room.client.peer && !finishedRef.current) {
+            toastStore.push('对手未能进入对局，请重新匹配', '⚠️', 'warn');
+            handleOver('p2', true);
+          }
+        }, 20000);
+      }
     }
 
     const handling = () => ({ das: settingsStore.get().das, arr: settingsStore.get().arr });
@@ -248,7 +261,7 @@ export default function GameScreen({ config, onExit, onRematch, onOpenSettings, 
       if (in1Ref.current) in1Ref.current.enabled = true;
       if (in2Ref.current) in2Ref.current.enabled = true;
     }, 2550);
-  }, [mode, botInfo, isVersus, isNet, room]);
+  }, [mode, botInfo, isVersus, isNet, room, handleOver]);
 
   // main loop + renderers + net wiring
   useEffect(() => {
@@ -262,6 +275,14 @@ export default function GameScreen({ config, onExit, onRematch, onOpenSettings, 
     }
 
     if (isNet && room) {
+      room.client.onPeer = (peer) => {
+        const rv = remoteRef.current;
+        if (!rv) return;
+        rv.name = peer.name;
+        rv.avatar = peer.avatar;
+        rv.rating = peer.rating;
+        setHudTick((x) => x + 1);
+      };
       room.client.onMsg = (m: RoomMsg) => {
         switch (m.t) {
           case 'state': remoteRef.current?.apply(m); break;
@@ -390,7 +411,7 @@ export default function GameScreen({ config, onExit, onRematch, onOpenSettings, 
       r1Ref.current?.destroy();
       r2Ref.current?.destroy();
       audio.intensity = 0;
-      if (room) { room.client.onMsg = null; room.client.onLeave = null; }
+      if (room) { room.client.onMsg = null; room.client.onLeave = null; room.client.onPeer = null; }
       if (import.meta.env.DEV) delete (window as unknown as Record<string, unknown>).__FB;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps

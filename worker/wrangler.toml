@@ -12,6 +12,15 @@ id = "REPLACE_WITH_YOUR_KV_ID"
 name = "ROOM"
 class_name = "Room"
 
+# 真人匹配队列（全局单例）
+[[durable_objects.bindings]]
+name = "QUEUE"
+class_name = "Queue"
+
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["Room"]
+
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["Queue"]

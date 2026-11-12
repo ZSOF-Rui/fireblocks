@@ -21,8 +21,10 @@ export class WsRoomClient implements RoomTransport {
     private me: PeerInfo,
     onError?: (msg: string) => void,
     private kind: 'lan' | 'online' = 'lan',
+    seed?: number,
   ) {
     this.onError = onError ?? null;
+    this.seed = seed ?? null;
     const base = url.trim().replace(/\/+$/, '').replace(/^http/, 'ws');
     this.ws = new WebSocket(`${base}/room?code=${encodeURIComponent(code)}&role=${isHost ? 'host' : 'guest'}`);
     this.ws.onopen = () => { if (!this.isHost) this.raw({ t: 'join', me: this.me }); };

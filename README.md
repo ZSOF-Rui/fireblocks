@@ -12,7 +12,7 @@
 
 - **标准细则引擎**：SRS 旋转 + 完整踢墙表、7-Bag 随机器、Hold 暂存、幽灵投影、500ms 锁定延迟（15 次移动重置）、DAS/ARR 手感调节、T-Spin（含 Mini）判定、Back-to-Back、Combo、Perfect Clear、官方重力曲线（最高 20 级）。
 - **原创 FEVER 狂热系统**：消行 / T 旋 / 四消 / 连击积攒热量，满 100 进入 12 秒狂热——得分 ×2、攻击 +2、画面与音乐同步升温。
-- **六种模式**：无尽马拉松、40 行竞速、每日挑战（全球同种子）、在线匹配 PK（Elo 天梯）、本地双人同屏、自定义房间（自设房间号，复制链接或输码加入；支持跨网络在线、局域网跨设备、同机多窗口三种真实联机方式）。
+- **六种模式**：无尽马拉松、40 行竞速、每日挑战（全球同种子）、在线匹配 PK（云端真人实时匹配 + Elo 天梯）、本地双人同屏、自定义房间（自设房间号，复制链接或输码加入；支持跨网络在线、局域网跨设备、同机多窗口三种真实联机方式）。
 - **对战攻击规则**：消行攻击、T 旋攻击、B2B 加成、Combo 攻击、PC +10、FEVER +2，攻击先抵消自身待收垃圾，垃圾行同批同孔。
 - **排行榜**：今日 / 本周 / 本月 / 总榜四档，按玩家本地时区切分周期；未配置云端时为本地模拟服务（界面有明确标识），配置后无缝切换真实云端。
 - **访问量监测**：累计访问、今日访问、独立访客、当前在线，主页与排行榜页实时展示。
@@ -102,11 +102,21 @@ npm run preview # 本地预览生产构建
 | 无尽马拉松 | 经典无尽模式，每 10 行升一级，重力按官方曲线加快，冲击最高分。 |
 | 40 行竞速 | 消除 40 行即获胜，比拼用时，成绩计入竞速榜（越快越靠前）。 |
 | 每日挑战 | 以当天日期为种子，所有玩家拿到完全相同的方块序列，每日刷新，只计今日榜。 |
-| 在线匹配 | 雷达扫描匹配对手 → 三局两胜式单局 PK，Elo 天梯分（K=28）。对手由本地 AI 驱动（强度随天梯分自适应）；配置云端后，匹配池会优先返回真实玩家档案。 |
+| 在线匹配 | 云端真人实时匹配：进入全局队列后按积分就近配对，双方拿到同一随机种子与房间号，自动进入真实对战（互发垃圾行、同步棋盘），Elo 天梯分（K=28）。排队人少时可直接与 AI 练手。 |
 | 本地双人 | 同屏分键盘对战，互相发送垃圾行，先被顶出者败。 |
 | 自定义房间 | 创建时可自设 3–8 位房间号（留空自动生成），等待页给出邀请链接与房号；对方打开链接或输入房号加入，加入页也可直接粘贴邀请链接自动解析。**在线**走 Cloudflare Durable Object 的 wss 中继，双方无需同一网络，公共网页版默认使用；**局域网**走 WebSocket 中继，同一 Wi-Fi 下跨设备真实联机；**同机窗口**走 BroadcastChannel（零服务器）。支持邀请链接 `?room=CODE`（在线带 `&via=online`，局域网带 `&lan=地址`）、断线判胜与再来一局。 |
 
-> 说明：自定义房间的「同机窗口」基于 BroadcastChannel，限同设备同浏览器；「在线」由已部署的 Worker 中继（`/room`，Durable Object），跨网络可用；「局域网」由 `lan/server.mjs` 提供 WebSocket 中继（默认端口 8788），见下文。HTTPS 页面无法连接 `ws://` 局域网地址（混合内容拦截），此时请使用「在线」房间。匹配 PK 的云端匹配池提供真实玩家档案，对局操作由 AI 模拟。
+> 说明：自定义房间的「同机窗口」基于 BroadcastChannel，限同设备同浏览器；「在线」由已部署的 Worker 中继（`/room`，Durable Object），跨网络可用；「局域网」由 `lan/server.mjs` 提供 WebSocket 中继（默认端口 8788），见下文。HTTPS 页面无法连接 `ws://` 局域网地址（混合内容拦截），此时请使用「在线」房间。匹配 PK 在配置云端后为真人实时对战（`/queue` Durable Object 配对，随后进入 `/room` 中继）；云端不可达时自动退化为本地 AI 对手。
+
+---
+
+## ⚔️ 真人实时匹配（跨网络 PvP）
+
+点「在线匹配」进入全局队列：Worker 的 `Queue` Durable Object 按 Elo 积分就近配对，成功后把**房间号、先后手与同一个随机种子**下发双方，两端随即通过 `/room` 中继进入真实对战。
+
+- 方块序列由服务端种子统一，避免双方进入时间不同导致序列不一致。
+- 对局结束按 Elo（K=28）结算天梯分并写入 vs 榜单。
+- 排队 10 秒仍无人时可一键切换 AI 练手；云端不可达时自动使用 AI。
 
 ---
 
@@ -177,7 +187,7 @@ npm run preview # 本地预览生产构建
 
 ## ☁️ 云端部署（Cloudflare Worker，可选）
 
-不部署也能完整游玩（本地模拟服务）。部署后获得：**真实全球排行榜（日 / 周 / 月 / 总）、真实访问量与在线统计、真实玩家匹配池、跨网络在线房间**。Cloudflare 免费额度（Workers 10 万请求/天 + KV 免费档 + SQLite Durable Objects 免费档）对个人站点绰绰有余。
+不部署也能完整游玩（本地模拟服务）。部署后获得：**真实全球排行榜（日 / 周 / 月 / 总）、真实访问量与在线统计、真人匹配队列、跨网络在线房间**。Cloudflare 免费额度（Workers 10 万请求/天 + KV 免费档 + SQLite Durable Objects 免费档）对个人站点绰绰有余。
 
 ### 一键部署
 
@@ -187,7 +197,7 @@ npm run preview # 本地预览生产构建
 bash deploy-cloud.sh
 ```
 
-脚本自动完成：安装 wrangler → 浏览器登录 Cloudflare → 创建 KV 命名空间并回填 `worker/wrangler.toml` → 部署 Worker（同时自动创建在线房间所需的 Durable Object）→ 把 `https://xxx.workers.dev` 地址写入 `public/config.js`（若存在 `dist/` 也同步写入）→ 连通性自检。
+脚本自动完成：安装 wrangler → 浏览器登录 Cloudflare → 创建 KV 命名空间并回填 `worker/wrangler.toml` → 部署 Worker（同时自动创建在线房间与匹配队列所需的 Durable Object）→ 把 `https://xxx.workers.dev` 地址写入 `public/config.js`（若存在 `dist/` 也同步写入）→ 连通性自检。
 
 ### 手动部署
 
@@ -270,8 +280,8 @@ FireBlocks/
 │  ├─ server.mjs         # 局域网服务：静态托管 dist/ + WebSocket 房间中继
 │  └─ package.json       # ws 依赖
 └─ worker/
-   ├─ src/index.ts       # Cloudflare Worker API（KV 榜单/统计/匹配池 + Room 在线房间中继）
-   ├─ wrangler.toml      # KV 绑定 + ROOM Durable Object（setup 自动回填 KV id）
+   ├─ src/index.ts       # Cloudflare Worker API（KV 榜单/统计 + Room 房间中继 + Queue 匹配队列）
+   ├─ wrangler.toml      # KV 绑定 + ROOM/QUEUE Durable Object（setup 自动回填 KV id）
    └─ setup.mjs          # 一键部署脚本
 ```
 
@@ -301,7 +311,7 @@ A：浏览器开发者工具 → Application → Local Storage，删除 `fb_` �
 
 ## 🛠️ 技术栈
 
-React 18 · TypeScript 5.6 · Vite 5 · Canvas 2D（精灵缓存 + 粒子系统）· WebAudio（全程序化合成）· BroadcastChannel（同机窗口）· WebSocket + Node `ws` 中继（局域网跨设备）· Cloudflare Workers + KV + Durable Objects（在线房间） · 自托管字体 Orbitron / Rajdhani
+React 18 · TypeScript 5.6 · Vite 5 · Canvas 2D（精灵缓存 + 粒子系统）· WebAudio（全程序化合成）· BroadcastChannel（同机窗口）· WebSocket + Node `ws` 中继（局域网跨设备）· Cloudflare Workers + KV + Durable Objects（在线房间 + 真人匹配队列） · 自托管字体 Orbitron / Rajdhani
 
 ---
 

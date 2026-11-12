@@ -1,6 +1,7 @@
 export interface Env {
   FB_KV: KVNamespace;
   ROOM: DurableObjectNamespace;
+  QUEUE: DurableObjectNamespace;
 }
 
 interface Entry {
@@ -251,6 +252,118 @@ export class Room {
   }
 }
 
+const PAIR_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+
+function pairCode(len = 6): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(len));
+  let s = '';
+  for (const b of bytes) s += PAIR_CHARS[b % PAIR_CHARS.length];
+  return s;
+}
+
+interface QueueEntry {
+  name: string;
+  avatar: string;
+  rating: number;
+  since: number;
+}
+
+// 匹配队列：全局单例 Durable Object，按积分就近配对，成功后把房间号与共同种子发给双方
+export class Queue {
+  constructor(private state: DurableObjectState) {}
+
+  async fetch(request: Request): Promise<Response> {
+    if (request.headers.get('Upgrade')?.toLowerCase() !== 'websocket') {
+      return new Response('expected websocket', { status: 426 });
+    }
+    const url = new URL(request.url);
+    const entry: QueueEntry = {
+      name: String(url.searchParams.get('name') ?? '').slice(0, 16) || '玩家',
+      avatar: String(url.searchParams.get('avatar') ?? '').slice(0, 8) || '🎮',
+      rating: Math.max(0, Math.min(5000, Number(url.searchParams.get('rating')) || 1000)),
+      since: Date.now(),
+    };
+
+    const pair = new WebSocketPair();
+    const client = pair[0];
+    const server = pair[1];
+    this.state.acceptWebSocket(server, ['q']);
+    server.serializeAttachment(entry);
+    server.send(JSON.stringify({ t: 'queued', rating: entry.rating }));
+
+    this.tryMatch();
+    if (!(await this.state.storage.getAlarm())) {
+      await this.state.storage.setAlarm(Date.now() + 4000);
+    }
+    return new Response(null, { status: 101, webSocket: client });
+  }
+
+  async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer) {
+    if (typeof message !== 'string') return;
+    try {
+      const m = JSON.parse(message) as { t?: string };
+      if (m.t === 'ping') ws.send(JSON.stringify({ t: 'pong' }));
+      else if (m.t === 'cancel') ws.close(4000, 'cancel');
+    } catch { /* ignore malformed frames */ }
+  }
+
+  async webSocketClose() {
+    this.tryMatch();
+  }
+
+  async alarm() {
+    this.tryMatch();
+    if (this.state.getWebSockets('q').length > 0) {
+      await this.state.storage.setAlarm(Date.now() + 4000);
+    }
+  }
+
+  private tryMatch() {
+    const entries = this.state.getWebSockets('q')
+      .map((ws) => ({ ws, meta: ws.deserializeAttachment() as QueueEntry | null }))
+      .filter((x): x is { ws: WebSocket; meta: QueueEntry } => !!x.meta);
+    if (entries.length < 2) return;
+
+    const used = new Set<WebSocket>();
+    for (let i = 0; i < entries.length; i++) {
+      const a = entries[i];
+      if (used.has(a.ws)) continue;
+      let best: (typeof entries)[number] | null = null;
+      let bestDiff = Infinity;
+      for (let j = i + 1; j < entries.length; j++) {
+        const b = entries[j];
+        if (used.has(b.ws)) continue;
+        const diff = Math.abs(a.meta.rating - b.meta.rating);
+        if (diff < bestDiff) { bestDiff = diff; best = b; }
+      }
+      if (!best) continue;
+      used.add(a.ws);
+      used.add(best.ws);
+      this.pair(a, best);
+    }
+  }
+
+  private pair(a: { ws: WebSocket; meta: QueueEntry }, b: { ws: WebSocket; meta: QueueEntry }) {
+    const room = pairCode();
+    const seed = crypto.getRandomValues(new Uint32Array(1))[0] % 0x7fffffff;
+    const tell = (to: { ws: WebSocket; meta: QueueEntry }, other: { meta: QueueEntry }, role: 'host' | 'guest') => {
+      try {
+        to.ws.send(JSON.stringify({
+          t: 'matched',
+          room,
+          role,
+          seed,
+          peer: { name: other.meta.name, avatar: other.meta.avatar, rating: other.meta.rating },
+        }));
+        to.ws.close(4000, 'matched');
+      } catch { /* peer vanished */ }
+    };
+    // 积分高的一方作为 host（先手），双方拿同一个种子保证方块序列一致
+    if (a.meta.rating >= b.meta.rating) { tell(a, b, 'host'); tell(b, a, 'guest'); }
+    else { tell(b, a, 'host'); tell(a, b, 'guest'); }
+  }
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
@@ -258,7 +371,10 @@ export default {
 
     try {
       if (url.pathname === '/' ) {
-        return json({ name: 'FireBlocks Cloud', ok: true, endpoints: ['/api/stats', '/api/visit', '/api/leaderboard', '/api/match', '/room'] });
+        return json({ name: 'FireBlocks Cloud', ok: true, endpoints: ['/api/stats', '/api/visit', '/api/leaderboard', '/api/match', '/room', '/queue'] });
+      }
+      if (url.pathname === '/queue') {
+        return env.QUEUE.get(env.QUEUE.idFromName('global')).fetch(request);
       }
       if (url.pathname === '/room') {
         const code = (url.searchParams.get('code') ?? '').toUpperCase();

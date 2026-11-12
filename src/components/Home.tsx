@@ -83,7 +83,7 @@ const MODES: { mode: Mode | 'match' | 'room'; icon: string; title: string; desc:
   { mode: 'marathon', icon: '🏃', title: '无尽马拉松', desc: '经典升级玩法，重力越来越快，冲击最高分', tag: '单人' },
   { mode: 'sprint', icon: '⏱️', title: '40 行竞速', desc: '最快消除 40 行，毫秒级计时上榜', tag: '竞速' },
   { mode: 'daily', icon: '📅', title: '每日挑战', desc: '今日全员同一套块序，公平决出最强', tag: '每日' },
-  { mode: 'match', icon: '⚔️', title: '在线匹配 PK', desc: '按积分匹配对手，垃圾行互攻，胜负算分', tag: '在线', hot: true },
+  { mode: 'match', icon: '⚔️', title: '在线匹配 PK', desc: '真人实时匹配，按积分配对，垃圾行互攻，胜负算分', tag: '在线', hot: true },
   { mode: 'local2p', icon: '👥', title: '本地双人', desc: '同一键盘分屏对战，面对面互相伤害', tag: '双人' },
   { mode: 'room', icon: '🗺️', title: '自定义房间', desc: '自设房间号，复制链接或输码加入；在线 / 局域网 / 同机窗口真实对战', tag: '真联机', hot: true },
 ];

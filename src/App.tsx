@@ -127,7 +127,8 @@ export default function App() {
         {screen.name === 'match' && (
           <Matchmaking
             onCancel={() => setScreen({ name: 'home' })}
-            onFound={(bot) => startGame({ mode: 'vs-ai', bot })}
+            onStartAi={(bot) => startGame({ mode: 'vs-ai', bot })}
+            onStartNet={(client, isHost, seed) => startGame({ mode: 'net', room: { client, isHost, via: 'online' }, seed })}
           />
         )}
         {screen.name === 'room' && (
