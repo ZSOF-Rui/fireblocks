@@ -101,7 +101,11 @@ export default function App() {
       <BackgroundFX />
       <Nav
         inGame={inGame}
-        gameTitle={inGame ? MODE_NAME[screen.config.mode] : undefined}
+        gameTitle={inGame
+          ? screen.config.mode === 'net'
+            ? screen.config.room?.via === 'online' ? '在线对战' : screen.config.room?.via === 'lan' ? '局域网对战' : '窗口对战'
+            : MODE_NAME[screen.config.mode]
+          : undefined}
         onHome={goHome}
         onRanking={() => setScreen({ name: 'ranking' })}
         onHelp={() => setModal('help')}
