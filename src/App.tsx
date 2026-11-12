@@ -10,7 +10,7 @@ import RoomLobby from './components/RoomLobby';
 import Toasts from './components/Toasts';
 import { HelpModal, ProfileModal, SettingsModal, CloudDownModal } from './components/Modals';
 import { audio } from './game/audio';
-import { MODE_NAME } from './game/constants';
+import { MODE_NAME, applyTheme } from './game/constants';
 import type { Mode } from './game/constants';
 import { cloud } from './services/cloud';
 import { settingsStore, useSettings } from './store';
@@ -19,19 +19,26 @@ type Screen =
   | { name: 'home' }
   | { name: 'ranking' }
   | { name: 'match' }
-  | { name: 'room'; initialCode?: string; autoJoin?: boolean }
+  | { name: 'room'; initialCode?: string; autoJoin?: boolean; lan?: string }
   | { name: 'game'; config: GameConfig; runId: number };
+
+applyTheme(settingsStore.get().theme);
+document.documentElement.dataset.theme = settingsStore.get().theme;
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>(() => {
-    const room = new URLSearchParams(location.search).get('room');
+    const params = new URLSearchParams(location.search);
+    const room = params.get('room');
     if (room && /^[A-Za-z0-9]{4}$/.test(room)) {
-      return { name: 'room', initialCode: room.toUpperCase(), autoJoin: true };
+      return { name: 'room', initialCode: room.toUpperCase(), autoJoin: true, lan: params.get('lan') ?? undefined };
     }
     return { name: 'home' };
   });
   const [modal, setModal] = useState<null | 'settings' | 'help' | 'profile' | 'cloud-down'>(null);
   const settings = useSettings();
+
+  applyTheme(settings.theme);
+  document.documentElement.dataset.theme = settings.theme;
 
   useEffect(() => {
     audio.applySettings(settings);
@@ -91,6 +98,7 @@ export default function App() {
         onRanking={() => setScreen({ name: 'ranking' })}
         onHelp={() => setModal('help')}
         onProfile={() => setModal('profile')}
+        onSettings={() => setModal('settings')}
         onExitGame={() => window.dispatchEvent(new CustomEvent('fb-exit-request'))}
       />
       <main className="main">
@@ -114,8 +122,9 @@ export default function App() {
           <RoomLobby
             initialCode={screen.initialCode}
             autoJoin={screen.autoJoin}
+            initialLan={screen.lan}
             onCancel={() => setScreen({ name: 'home' })}
-            onStart={(client, isHost) => startGame({ mode: 'net', room: { client, isHost }, seed: client.seed ?? undefined })}
+            onStart={(client, isHost, via) => startGame({ mode: 'net', room: { client, isHost, via }, seed: client.seed ?? undefined })}
           />
         )}
         {screen.name === 'game' && (

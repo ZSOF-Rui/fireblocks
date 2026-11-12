@@ -32,6 +32,7 @@ export interface EngineOpts {
   seed: string | number;
   mode: Mode;
   startLevel?: number;
+  speedScale?: number;
   versus?: boolean;
   onEvent?: (e: GameEvent) => void;
 }
@@ -49,6 +50,7 @@ export class Engine {
   lines = 0;
   level = 1;
   startLevel = 1;
+  speedScale = 1;
   combo = -1;
   b2b = false;
   heat = 0;
@@ -83,6 +85,7 @@ export class Engine {
     this.mode = opts.mode;
     this.versus = !!opts.versus;
     this.startLevel = opts.startLevel ?? 1;
+    this.speedScale = opts.speedScale ?? 1;
     this.level = this.startLevel;
     this.emit = opts.onEvent ?? (() => {});
     for (let y = 0; y < ROWS; y++) this.board.push(new Array(COLS).fill(0));
@@ -219,7 +222,7 @@ export class Engine {
 
     const a = this.active;
     if (!a) return;
-    const g = gravityInterval(this.level);
+    const g = gravityInterval(this.level) / this.speedScale;
     const interval = this.soft ? Math.max(0.01, g / 20) : g;
 
     if (this.canDown()) {

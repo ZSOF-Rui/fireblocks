@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { audio } from '../game/audio';
+import { THEMES } from '../game/constants';
+import type { ThemeId } from '../game/constants';
 import { cloud, cloudStatus, getApiBase, setApiBase } from '../services/cloud';
 import { fmtNum, fmtTime, profileStore, settingsStore, toastStore, useProfile, useSettings } from '../store';
 import type { Settings } from '../store';
@@ -62,6 +64,7 @@ function Toggle({ label, value, onChange, hint }: {
 const DEFAULTS: Settings = {
   das: 150, arr: 30, ghost: true, grid: true, shake: true, particles: 'med',
   muted: false, musicOn: true, volMaster: 0.9, volSfx: 0.8, volMusic: 0.42, touch: 'auto',
+  startLevel: 1, speedScale: 1, theme: 'flame',
 };
 
 export function SettingsModal({ onClose }: { onClose: () => void }) {
@@ -78,7 +81,21 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
       <Slider label="DAS 横移延迟" value={s.das} min={60} max={250} step={5} unit="ms" onChange={(v) => set({ das: v })} />
       <Slider label="ARR 横移重复" value={s.arr} min={0} max={80} step={2} unit="ms" onChange={(v) => set({ arr: v })} />
       <p className="setting-hint">DAS：按住方向键到开始连续移动的延迟；ARR：连续移动间隔，0 = 瞬间贴墙。</p>
+      <h3 className="setting-group">难度与速度</h3>
+      <Slider label="起始等级" value={s.startLevel} min={1} max={15} unit=" Lv" onChange={(v) => set({ startLevel: v })} />
+      <Slider label="重力速度" value={Math.round(s.speedScale * 100)} min={50} max={200} step={10} unit="%" onChange={(v) => set({ speedScale: v / 100 })} />
+      <p className="setting-hint">起始等级决定初始重力与计分倍率；重力速度为整体倍率。仅作用于单人模式（马拉松 / 竞速 / 每日），对战模式统一标准速度保证公平。</p>
       <h3 className="setting-group">画面</h3>
+      <div className="setting-row">
+        <span className="setting-label">主题风格</span>
+        <div className="seg">
+          {(Object.keys(THEMES) as ThemeId[]).map((t) => (
+            <button key={t} className={s.theme === t ? 'active' : ''} onClick={() => { audio.click(); set({ theme: t }); }}>
+              {THEMES[t].name}
+            </button>
+          ))}
+        </div>
+      </div>
       <Toggle label="幽灵投影" hint="显示落点预览" value={s.ghost} onChange={(v) => set({ ghost: v })} />
       <Toggle label="网格线" value={s.grid} onChange={(v) => set({ grid: v })} />
       <Toggle label="屏幕震动" value={s.shake} onChange={(v) => set({ shake: v })} />
@@ -242,6 +259,7 @@ export function HelpModal({ onClose }: { onClose: () => void }) {
             <li>标准 10×20 场地，<b>7-bag</b> 随机发块，支持 <b>SRS</b> 旋转与踢墙。</li>
             <li><b>幽灵投影</b>预览落点；<b>暂存</b>每块限用一次；落地后有 0.5 秒锁定延迟，可用移动/旋转重置（最多 15 次）。</li>
             <li>每消 10 行升 1 级，重力逐渐加快。堆到顶部即结束。</li>
+            <li>设置中可调<b>起始等级 / 重力速度</b>（仅单人模式），并可切换<b>火焰 / 寒冰 / 霓虹 / 翡翠</b>四套主题。</li>
           </ul>
         </section>
         <section>
@@ -306,6 +324,7 @@ export function HelpModal({ onClose }: { onClose: () => void }) {
             <li><b>在线匹配</b>：按积分匹配对手（演示环境为本地 AI 模拟），胜负影响积分。</li>
             <li><b>本地双人</b>：同一键盘分屏对战，互相发送垃圾行。</li>
             <li><b>窗口对战</b>：同一浏览器开两个窗口，输入房间号即可<b>真实联机</b>（BroadcastChannel 直连，无需服务器）。</li>
+            <li><b>局域网对战</b>：主机双击 <b>lan-play.bat</b> 启动服务，同一 Wi-Fi 下的手机 / 电脑打开主机地址，输入房间号即可<b>跨设备真实联机</b>。</li>
           </ul>
         </section>
       </div>

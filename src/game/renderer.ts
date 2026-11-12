@@ -1,4 +1,4 @@
-import { COLS, ROWS, HIDDEN, VISIBLE, COLORS, SHAPES, BOX } from './constants';
+import { COLS, ROWS, HIDDEN, VISIBLE, COLORS, SHAPES, BOX, currentTheme } from './constants';
 import type { PieceType } from './constants';
 import type { Active, GameEvent } from './engine';
 
@@ -75,7 +75,7 @@ export class BoardRenderer {
   }
 
   private sprite(v: number): HTMLCanvasElement {
-    const key = `${v}:${this.cell.toFixed(2)}`;
+    const key = `${currentTheme.id}:${v}:${this.cell.toFixed(2)}`;
     let s = this.sprites.get(key);
     if (s) return s;
     const c = this.cell;
@@ -159,7 +159,7 @@ export class BoardRenderer {
           }
         }
         const big = e.kind === 'tetris' || (e.kind || '').startsWith('ts');
-        this.addPopup(e.text || '', this.clearSub(e), big ? '#ffc93c' : '#ff8a00', big);
+        this.addPopup(e.text || '', this.clearSub(e), big ? currentTheme.gold : currentTheme.primary, big);
         if (o.shake) this.shake(e.n! >= 4 ? 9 : 3.5 + e.n!);
         if (e.kind === 'tetris') this.goldFlash = 0.35;
         break;
@@ -192,7 +192,7 @@ export class BoardRenderer {
         break;
       }
       case 'fever': {
-        this.addPopup('FEVER!!', '得分 ×2 · 攻击 +2', '#ffc93c', true);
+        this.addPopup('FEVER!!', '得分 ×2 · 攻击 +2', currentTheme.gold, true);
         this.goldFlash = 0.6;
         if (o.shake) this.shake(10);
         for (let i = 0; i < pc * 10; i++) {
@@ -202,13 +202,13 @@ export class BoardRenderer {
             vx: (Math.random() - 0.5) * 120, vy: -Math.random() * 420 - 120,
             life: 1 + Math.random(), max: 2,
             size: this.cell * (0.1 + Math.random() * 0.16),
-            color: ['#ffc93c', '#ff6a00', '#ff3b1f'][i % 3],
+            color: [currentTheme.gold, currentTheme.hot, currentTheme.primary][i % 3],
           });
         }
         break;
       }
       case 'pc': {
-        this.addPopup('PERFECT CLEAR', '全场清空 +10 攻击', '#00e5ff', true);
+        this.addPopup('PERFECT CLEAR', '全场清空 +10 攻击', COLORS[1], true);
         for (let i = 0; i < pc * 12; i++) {
           this.particles.push({
             x: this.ox + Math.random() * this.cell * COLS,
@@ -222,7 +222,7 @@ export class BoardRenderer {
         break;
       }
       case 'levelup': {
-        this.addPopup(`LEVEL ${e.n}`, '重力提升', '#39e75f', false);
+        this.addPopup(`LEVEL ${e.n}`, '重力提升', COLORS[4], false);
         break;
       }
       case 'over': {
@@ -231,7 +231,7 @@ export class BoardRenderer {
         break;
       }
       case 'attack': {
-        this.addPopup(`ATTACK +${e.n}`, '', '#ff3b5c', false);
+        this.addPopup(`ATTACK +${e.n}`, '', COLORS[5], false);
         break;
       }
     }
@@ -280,14 +280,14 @@ export class BoardRenderer {
 
     // board background
     const bg = ctx.createLinearGradient(0, this.oy, 0, this.oy + bh);
-    bg.addColorStop(0, 'rgba(24,15,10,0.92)');
-    bg.addColorStop(1, 'rgba(14,9,6,0.96)');
+    bg.addColorStop(0, hexA(currentTheme.boardTop, 0.92));
+    bg.addColorStop(1, hexA(currentTheme.boardBottom, 0.96));
     ctx.fillStyle = bg;
     ctx.fillRect(this.ox, this.oy, bw, bh);
 
     // grid
     if (o.grid) {
-      ctx.strokeStyle = 'rgba(255,138,0,0.07)';
+      ctx.strokeStyle = hexA(currentTheme.primary, 0.07);
       ctx.lineWidth = 1;
       ctx.beginPath();
       for (let x = 1; x < COLS; x++) {
@@ -316,8 +316,8 @@ export class BoardRenderer {
     if (!v.fever && v.heat > 55) {
       const a = ((v.heat - 55) / 45) * 0.16;
       const hg = ctx.createLinearGradient(0, this.oy + bh, 0, this.oy + bh * 0.5);
-      hg.addColorStop(0, `rgba(255,106,0,${a})`);
-      hg.addColorStop(1, 'rgba(255,106,0,0)');
+      hg.addColorStop(0, hexA(currentTheme.hot, a));
+      hg.addColorStop(1, hexA(currentTheme.hot, 0));
       ctx.fillStyle = hg;
       ctx.fillRect(this.ox, this.oy, bw, bh);
     }
@@ -406,10 +406,10 @@ export class BoardRenderer {
           vx: (Math.random() - 0.5) * 40, vy: -Math.random() * 160 - 60,
           life: 0.8 + Math.random() * 0.7, max: 1.5,
           size: this.cell * (0.06 + Math.random() * 0.1),
-          color: Math.random() < 0.5 ? '#ffc93c' : '#ff6a00',
+          color: Math.random() < 0.5 ? currentTheme.gold : currentTheme.hot,
         });
       }
-      ctx.fillStyle = `rgba(255,106,0,${0.05 + 0.02 * Math.sin(this.time * 8)})`;
+      ctx.fillStyle = hexA(currentTheme.hot, 0.05 + 0.02 * Math.sin(this.time * 8));
       ctx.fillRect(this.ox, this.oy, bw, bh);
     }
 
@@ -435,10 +435,10 @@ export class BoardRenderer {
 
     // fever border
     if (v.fever) {
-      const hue = 30 + 20 * Math.sin(this.time * 5);
+      const hue = currentTheme.hue + 20 * Math.sin(this.time * 5);
       ctx.strokeStyle = `hsla(${hue},100%,60%,0.9)`;
       ctx.lineWidth = 3;
-      ctx.shadowColor = '#ff6a00';
+      ctx.shadowColor = currentTheme.hot;
       ctx.shadowBlur = 14;
       ctx.strokeRect(this.ox - 1.5, this.oy - 1.5, bw + 3, bh + 3);
       ctx.shadowBlur = 0;
@@ -452,7 +452,7 @@ export class BoardRenderer {
     }
     if (this.goldFlash > 0) {
       this.goldFlash -= dt;
-      ctx.fillStyle = `rgba(255,200,60,${Math.max(0, this.goldFlash) * 0.25})`;
+      ctx.fillStyle = hexA(currentTheme.gold, Math.max(0, this.goldFlash) * 0.25);
       ctx.fillRect(this.ox, this.oy, bw, bh);
     }
 

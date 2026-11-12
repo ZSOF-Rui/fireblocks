@@ -10,7 +10,7 @@ import { MODE_NAME, SPRINT_TARGET } from '../game/constants';
 import type { Mode } from '../game/constants';
 import { randomSeed, todaySeed } from '../game/rng';
 import { RemoteView, encodeBoard } from '../net/room';
-import type { RoomClient, RoomMsg } from '../net/room';
+import type { RoomTransport, RoomMsg } from '../net/room';
 import type { BotOpponent } from '../services/cloud';
 import { cloud } from '../services/cloud';
 import { fmtNum, fmtTime, settingsStore, useSettings } from '../store';
@@ -19,7 +19,7 @@ import TouchControls from './TouchControls';
 export interface GameConfig {
   mode: Mode;
   bot?: BotOpponent;
-  room?: { client: RoomClient; isHost: boolean };
+  room?: { client: RoomTransport; isHost: boolean; via?: 'window' | 'lan' };
   seed?: number;
 }
 
@@ -190,7 +190,14 @@ export default function GameScreen({ config, onExit, onRematch, onOpenSettings, 
 
     const seedVal = seed ?? (mode === 'daily' ? todaySeed() : randomSeed());
     const versus = isVersus;
-    const p1 = new Engine({ seed: seedVal, mode, versus, onEvent: (e) => ev1.current.push(e) });
+    const st = settingsStore.get();
+    const solo = mode === 'marathon' || mode === 'sprint' || mode === 'daily';
+    const p1 = new Engine({
+      seed: seedVal, mode, versus,
+      startLevel: solo ? st.startLevel : 1,
+      speedScale: solo ? st.speedScale : 1,
+      onEvent: (e) => ev1.current.push(e),
+    });
     p1Ref.current = p1;
 
     in1Ref.current?.detach();
@@ -584,7 +591,11 @@ export default function GameScreen({ config, onExit, onRematch, onOpenSettings, 
   return (
     <div className={`game-screen ${isVersus ? 'versus' : ''} ${touchOn && mode !== 'local2p' ? 'has-touch' : ''}`}>
       <div className="game-top">
-        <span className="mode-badge">{MODE_NAME[mode]}{mode === 'daily' ? ` · ${todaySeed().slice(6)}` : ''}</span>
+        <span className="mode-badge">
+          {mode === 'net' ? (room?.via === 'lan' ? '局域网对战' : '窗口对战') : MODE_NAME[mode]}
+          {mode === 'daily' ? ` · ${todaySeed().slice(6)}` : ''}
+          {isSolo && (settings.startLevel > 1 || settings.speedScale !== 1) ? ` · Lv${settings.startLevel}起 ${Math.round(settings.speedScale * 100)}%` : ''}
+        </span>
         <span className="game-timer">{fmtTime((p1?.elapsed ?? 0) * 1000)}</span>
         <div className="game-top-btns">
           {canPause && phase !== 'over' && (

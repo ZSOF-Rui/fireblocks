@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { cloud, PERIOD_NAME } from '../services/cloud';
+import { cloud, cloudStatus, PERIOD_NAME } from '../services/cloud';
 import type { LbEntry, LbMode, LbPeriod } from '../services/cloud';
 import { audio } from '../game/audio';
 import { fmtNum, fmtTime } from '../store';
@@ -145,7 +145,9 @@ export default function Leaderboard() {
         </div>
       )}
       <p className="home-footnote">
-        未配置云端时，榜单保存在本地浏览器并模拟实时刷新；部署 Cloudflare Worker 后（见 README），全站玩家共享同一份日 / 周 / 月 / 总榜。对战积分按 Elo 规则结算。
+        {cloudStatus().mode === 'cloud'
+          ? '已连接云端 Worker：以下为全站玩家共享的真实日 / 周 / 月 / 总榜数据，每 12 秒自动同步。对战积分按 Elo 规则结算。'
+          : '未配置云端时，榜单保存在本地浏览器并模拟实时刷新；部署 Cloudflare Worker 后（见 README），全站玩家共享同一份日 / 周 / 月 / 总榜。对战积分按 Elo 规则结算。'}
       </p>
     </div>
   );

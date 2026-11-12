@@ -21,6 +21,51 @@ export const COLORS: Record<number, string> = {
   8: '#6b5d55', // garbage warm ash
 };
 
+export type ThemeId = 'flame' | 'ice' | 'neon' | 'jade';
+export interface ThemeDef {
+  id: ThemeId;
+  name: string;
+  colors: Record<number, string>;
+  primary: string;
+  hot: string;
+  gold: string;
+  boardTop: string;
+  boardBottom: string;
+  hue: number;
+  emberHue: [number, number];
+}
+export const THEMES: Record<ThemeId, ThemeDef> = {
+  flame: {
+    id: 'flame', name: '烈焰',
+    colors: { 1: '#00e5ff', 2: '#ffd60a', 3: '#e14eff', 4: '#39e75f', 5: '#ff3b5c', 6: '#3d7bff', 7: '#ff8a00', 8: '#6b5d55' },
+    primary: '#ff8a00', hot: '#ff6a00', gold: '#ffc93c',
+    boardTop: '#180f0a', boardBottom: '#0e0906', hue: 30, emberHue: [18, 50],
+  },
+  ice: {
+    id: 'ice', name: '寒冰',
+    colors: { 1: '#7dd8ff', 2: '#e8f6ff', 3: '#5f8cff', 4: '#37e6c8', 5: '#ff5c7a', 6: '#3d7bff', 7: '#9adfff', 8: '#5d6a75' },
+    primary: '#66c7ff', hot: '#2f9dff', gold: '#bfe9ff',
+    boardTop: '#0a1220', boardBottom: '#060b14', hue: 205, emberHue: [190, 225],
+  },
+  neon: {
+    id: 'neon', name: '霓虹',
+    colors: { 1: '#00e5ff', 2: '#ffe95c', 3: '#ff2d95', 4: '#a6ff3d', 5: '#ff3b5c', 6: '#7a5cff', 7: '#ff8a00', 8: '#6b5d70' },
+    primary: '#ff2d95', hot: '#b537ff', gold: '#ffe95c',
+    boardTop: '#150a1e', boardBottom: '#0d0614', hue: 300, emberHue: [280, 330],
+  },
+  jade: {
+    id: 'jade', name: '翡翠',
+    colors: { 1: '#4dffd2', 2: '#d8ff5c', 3: '#3dff7a', 4: '#39e75f', 5: '#ff6a4d', 6: '#2fbf9f', 7: '#a4ff4d', 8: '#5d6b5d' },
+    primary: '#39e75f', hot: '#00c878', gold: '#d8ff5c',
+    boardTop: '#0a1810', boardBottom: '#061009', hue: 140, emberHue: [110, 160],
+  },
+};
+export let currentTheme: ThemeDef = THEMES.flame;
+export function applyTheme(id: ThemeId) {
+  currentTheme = THEMES[id] ?? THEMES.flame;
+  Object.assign(COLORS, currentTheme.colors);
+}
+
 const BASE: Record<PieceType, { n: number; cells: [number, number][] }> = {
   I: { n: 4, cells: [[0, 1], [1, 1], [2, 1], [3, 1]] },
   O: { n: 2, cells: [[0, 0], [1, 0], [0, 1], [1, 1]] },

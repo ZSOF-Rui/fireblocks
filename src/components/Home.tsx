@@ -3,7 +3,7 @@ import { Engine } from '../game/engine';
 import { Bot } from '../game/bot';
 import { BoardRenderer } from '../game/renderer';
 import { randomSeed } from '../game/rng';
-import { cloud } from '../services/cloud';
+import { cloud, cloudStatus } from '../services/cloud';
 import type { SiteStats } from '../services/cloud';
 import { fmtNum, fmtTime, useProfile } from '../store';
 import { FlameLogo } from './Nav';
@@ -85,7 +85,7 @@ const MODES: { mode: Mode | 'match' | 'room'; icon: string; title: string; desc:
   { mode: 'daily', icon: '📅', title: '每日挑战', desc: '今日全员同一套块序，公平决出最强', tag: '每日' },
   { mode: 'match', icon: '⚔️', title: '在线匹配 PK', desc: '按积分匹配对手，垃圾行互攻，胜负算分', tag: '在线', hot: true },
   { mode: 'local2p', icon: '👥', title: '本地双人', desc: '同一键盘分屏对战，面对面互相伤害', tag: '双人' },
-  { mode: 'room', icon: '🪟', title: '窗口对战', desc: '开两个浏览器窗口输房间号，真实联机零服务器', tag: '真联机', hot: true },
+  { mode: 'room', icon: '🌐', title: '窗口 / 局域网对战', desc: '同机双窗口零服务器，或局域网跨设备真实联机', tag: '真联机', hot: true },
 ];
 
 export default function Home({ onPlay, onMatch, onRoom, onRanking, onHelp }: Props) {
@@ -94,7 +94,7 @@ export default function Home({ onPlay, onMatch, onRoom, onRanking, onHelp }: Pro
     <div className="screen home">
       <section className="home-hero">
         <div className="hero-text">
-          <div className="hero-badge">🔥 火焰主题 · 标准规则 · 原创狂热系统</div>
+          <div className="hero-badge">🔥 标准规则 · 原创狂热系统 · 四套主题 · 局域网联机</div>
           <h1 className="hero-logo">
             <FlameLogo size={64} />
             <span className="hero-logo-cn">炎块</span>
@@ -154,8 +154,9 @@ export default function Home({ onPlay, onMatch, onRoom, onRanking, onHelp }: Pro
         </button>
         <VisitStats />
         <p className="home-footnote">
-          演示环境：排行榜与匹配对手由本地模拟服务提供（数据保存在浏览器），窗口对战为同浏览器真实直连。
-          部署 Cloudflare Worker 云端后，即可拥有全站共享的日 / 周 / 月排行榜与真实访问量统计（见 README）。
+          {cloudStatus().mode === 'cloud'
+            ? '已连接云端 Worker：排行榜、访问量与匹配池为全站共享的真实数据；窗口 / 局域网对战为设备间真实直连。'
+            : '本地自定义榜单模式：排行榜与匹配对手由本地模拟服务提供（数据保存在浏览器）。在设置中填入 Cloudflare Worker 地址即可切换为全站共享云端数据（部署方法见 README）。'}
         </p>
       </section>
     </div>

@@ -5,6 +5,16 @@ import type { PieceType } from '../game/constants';
 
 export interface PeerInfo { name: string; avatar: string; rating: number }
 
+export interface RoomTransport {
+  peer: PeerInfo | null;
+  seed: number | null;
+  onPeer: ((p: PeerInfo, seed: number) => void) | null;
+  onMsg: ((m: RoomMsg) => void) | null;
+  onLeave: (() => void) | null;
+  send(m: RoomMsg): void;
+  close(): void;
+}
+
 export type RoomMsg =
   | { t: 'join'; me: PeerInfo }
   | { t: 'welcome'; me: PeerInfo; seed: number }
@@ -66,7 +76,7 @@ export class RemoteView implements BoardView {
   }
 }
 
-export class RoomClient {
+export class RoomClient implements RoomTransport {
   channel: BroadcastChannel;
   peer: PeerInfo | null = null;
   seed: number | null = null;

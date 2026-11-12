@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from 'react';
+import type { ThemeId } from './game/constants';
 
 function createStore<T extends object>(key: string, initial: T) {
   let state: T = { ...initial };
@@ -37,11 +38,15 @@ export interface Settings {
   volSfx: number;
   volMusic: number;
   touch: 'auto' | 'on' | 'off';
+  startLevel: number;
+  speedScale: number;
+  theme: ThemeId;
 }
 
 export const settingsStore = createStore<Settings>('fb_settings_v1', {
   das: 150, arr: 30, ghost: true, grid: true, shake: true, particles: 'med',
   muted: false, musicOn: true, volMaster: 0.9, volSfx: 0.8, volMusic: 0.42, touch: 'auto',
+  startLevel: 1, speedScale: 1, theme: 'flame',
 });
 
 export interface Profile {

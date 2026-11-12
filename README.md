@@ -12,12 +12,14 @@
 
 - **标准细则引擎**：SRS 旋转 + 完整踢墙表、7-Bag 随机器、Hold 暂存、幽灵投影、500ms 锁定延迟（15 次移动重置）、DAS/ARR 手感调节、T-Spin（含 Mini）判定、Back-to-Back、Combo、Perfect Clear、官方重力曲线（最高 20 级）。
 - **原创 FEVER 狂热系统**：消行 / T 旋 / 四消 / 连击积攒热量，满 100 进入 12 秒狂热——得分 ×2、攻击 +2、画面与音乐同步升温。
-- **六种模式**：无尽马拉松、40 行竞速、每日挑战（全球同种子）、在线匹配 PK（Elo 天梯）、本地双人同屏、窗口对战（房间码跨标签页实时对战）。
+- **六种模式**：无尽马拉松、40 行竞速、每日挑战（全球同种子）、在线匹配 PK（Elo 天梯）、本地双人同屏、窗口 / 局域网对战（房间码，同机多窗口或局域网跨设备实时对战）。
 - **对战攻击规则**：消行攻击、T 旋攻击、B2B 加成、Combo 攻击、PC +10、FEVER +2，攻击先抵消自身待收垃圾，垃圾行同批同孔。
 - **排行榜**：今日 / 本周 / 本月 / 总榜四档，按玩家本地时区切分周期；未配置云端时为本地模拟服务（界面有明确标识），配置后无缝切换真实云端。
 - **访问量监测**：累计访问、今日访问、独立访客、当前在线，主页与排行榜页实时展示。
 - **全程序化音画**：WebAudio 合成音效 + 112 BPM 合成器浪潮背景乐（狂热时自动增强），Canvas 粒子 / 震屏 / 拖尾 / 危险红晕，无任何外部素材请求。
-- **完整体验**：触屏虚拟按键、设置中心（手感 / 画面 / 音量 / 云端）、个人档案（昵称 / 头像 / 战绩）、暂停 / 重开 / 结算 / 再来一局。
+- **难度与速度自定义**：起始等级 1–15、重力速度 50%–200%，仅作用于单人模式（马拉松 / 竞速 / 每日）；对战模式统一标准速度保证公平。
+- **四套主题**：烈焰 / 寒冰 / 霓虹 / 翡翠，UI 配色、Logo 渐变、方块精灵与粒子全联动，对局中可即时切换并自动保存。
+- **完整体验**：触屏虚拟按键、设置中心（手感 / 难度与速度 / 主题 / 画面 / 音量 / 云端）、个人档案（昵称 / 头像 / 战绩）、暂停 / 重开 / 结算 / 再来一局。
 
 ---
 
@@ -32,6 +34,7 @@
 | 启动开发服务器（自动装依赖、开浏览器） | 双击 `start.bat` | `bash start.sh` |
 | 构建分发版 + 打包 zip | 双击 `build.bat` | `bash build.sh` |
 | 一键部署云端（Cloudflare Worker） | 双击 `deploy-cloud.bat` | `bash deploy-cloud.sh` |
+| 启动局域网联机服务（静态托管 + WS 中继） | 双击 `lan-play.bat` | `node lan/server.mjs` |
 
 ### 手动命令
 
@@ -101,9 +104,37 @@ npm run preview # 本地预览生产构建
 | 每日挑战 | 以当天日期为种子，所有玩家拿到完全相同的方块序列，每日刷新，只计今日榜。 |
 | 在线匹配 | 雷达扫描匹配对手 → 三局两胜式单局 PK，Elo 天梯分（K=28）。对手由本地 AI 驱动（强度随天梯分自适应）；配置云端后，匹配池会优先返回真实玩家档案。 |
 | 本地双人 | 同屏分键盘对战，互相发送垃圾行，先被顶出者败。 |
-| 窗口对战 | 创建 / 加入 4 位房间码，**同一浏览器的多个标签页 / 窗口**实时对战（BroadcastChannel），支持邀请链接 `?room=ABCD`、断线检测与再来一局。 |
+| 窗口 / 局域网对战 | 创建 / 加入 4 位房间码实时对战。**同机窗口**走 BroadcastChannel（零服务器）；**局域网**走 WebSocket 中继，同一 Wi-Fi 下手机 / 电脑跨设备真实联机。支持邀请链接 `?room=ABCD`（局域网另带 `&lan=地址`）、断线判胜与再来一局。 |
 
-> 说明：窗口对战基于 BroadcastChannel，限同设备同浏览器；跨设备实时对战需要 WebSocket 中继服务，当前版本未包含。匹配 PK 的云端匹配池提供真实玩家档案，对局操作由 AI 模拟。
+> 说明：同机窗口对战基于 BroadcastChannel，限同设备同浏览器；局域网对战由 `lan/server.mjs` 提供 WebSocket 中继（默认端口 8788），见下文「局域网联机」。匹配 PK 的云端匹配池提供真实玩家档案，对局操作由 AI 模拟。
+
+---
+
+## 🌐 局域网联机（跨设备真实对战）
+
+同一 Wi-Fi / 局域网下的手机、平板、电脑可以真实实时对战（垃圾行互攻、断线判胜、再来一局），无需任何云服务。
+
+### 主机（提供服务的一方）
+
+1. 先构建分发版：双击 `build.bat`（或 `npm run build`），生成 `dist/`。
+2. 双击 **`lan-play.bat`**（或 `node lan/server.mjs`）。脚本自动安装 `ws` 依赖并启动服务：
+   - 静态托管 `dist/`（单文件构建，手机浏览器直接打开即玩）；
+   - WebSocket 房间中继，监听 `0.0.0.0:8788`（可用环境变量 `PORT` 改端口）。
+3. 控制台会打印若干 **局域网地址**，形如 `http://192.168.x.x:8788`。
+
+### 加入对战
+
+- **主机**：浏览器打开 `http://localhost:8788` → 「窗口 / 局域网对战」→ 选「局域网」→ 创建房间，得到 4 位房间码。
+- **其他设备**：浏览器打开主机的局域网地址 → 「窗口 / 局域网对战」→ 选「局域网」→ 填入同一房间码加入。
+- **邀请链接**：创建房间后界面提供一键复制的链接 `http://<主机地址>/?room=ABCD&lan=ws://<主机地址>:8788`，其他设备点开即自动加入。
+- 也可手动填写局域网服务地址（默认按当前页面主机名推断 `ws://<hostname>:8788`）。
+
+### 说明
+
+- 中继只转发对局消息（`join/welcome/state/attack/over/rematch/ping/bye`），不存储任何数据；房间满员 / 主机不在线 / 房间号占用都会给出明确提示。
+- 一方断开时另一方立即收到 `bye` 并判定胜利，可「再战一局」重新握手。
+- 若 Windows 防火墙拦截，请允许 Node.js 通过专用 / 专用网络；确保所有设备在同一网段。
+- 同机多窗口对战仍可选「同机窗口」（BroadcastChannel），无需启动本服务。
 
 ---
 
@@ -199,7 +230,7 @@ window.FIREBLOCKS_CONFIG = { apiBase: "https://fireblocks-cloud.<你的子域>.w
 | `public/config.js` | 运行时云端地址，分发后可直接改，无需重新构建 |
 | `.env`（复制 `.env.example`） | 构建期注入 `VITE_API_BASE` |
 | 游戏内「设置 → 云端服务」 | 覆盖以上两者，可测试连接 / 一键保存 |
-| 游戏内「设置」 | DAS 60–250ms、ARR 0–80ms、幽灵 / 网格 / 震屏 / 粒子档位 / 虚拟按键 / 音乐与三通道音量 |
+| 游戏内「设置」 | DAS 60–250ms、ARR 0–80ms、起始等级 1–15、重力速度 50–200%、主题（烈焰 / 寒冰 / 霓虹 / 翡翠）、幽灵 / 网格 / 震屏 / 粒子档位 / 虚拟按键 / 音乐与三通道音量 |
 
 个人数据（档案、设置、本地榜单、访问统计）均存于浏览器 localStorage，键前缀 `fb_`。
 
@@ -210,17 +241,21 @@ window.FIREBLOCKS_CONFIG = { apiBase: "https://fireblocks-cloud.<你的子域>.w
 ```
 FireBlocks/
 ├─ index.html / vite.config.ts / tsconfig.json
-├─ start.bat|sh  build.bat|sh  deploy-cloud.bat|sh   # 一键脚本
+├─ start.bat|sh  build.bat|sh  deploy-cloud.bat|sh  lan-play.bat   # 一键脚本
 ├─ public/
 │  ├─ config.js          # 运行时云端配置（部署脚本自动写入）
 │  └─ favicon.svg
 ├─ src/
 │  ├─ game/              # 引擎：constants / rng / engine / input / bot / audio / renderer
-│  ├─ net/room.ts        # BroadcastChannel 房间协议
+│  ├─ net/room.ts        # BroadcastChannel 房间协议（同机窗口）
+│  ├─ net/wsroom.ts      # WebSocket 房间客户端（局域网跨设备）
 │  ├─ services/cloud.ts  # 云/本地双通道：榜单、匹配、访问统计
 │  ├─ components/        # Home / GameScreen / Leaderboard / Matchmaking / RoomLobby / Modals / Nav / …
 │  ├─ store.ts           # localStorage 状态（设置/档案/提示）
-│  └─ styles.css         # 火焰主题视觉系统
+│  └─ styles.css         # 四套主题视觉系统（CSS 变量 + data-theme）
+├─ lan/
+│  ├─ server.mjs         # 局域网服务：静态托管 dist/ + WebSocket 房间中继
+│  └─ package.json       # ws 依赖
 └─ worker/
    ├─ src/index.ts       # Cloudflare Worker API（KV 榜单/统计/匹配池）
    ├─ wrangler.toml      # KV 绑定（setup 自动回填 id）
@@ -234,8 +269,11 @@ FireBlocks/
 **Q：不部署云端，排行榜是假的吗？**
 A：是本地模拟服务，界面会明确标注「本地模拟」。游戏本体（引擎、对战、双人、房间）完全真实可玩；部署 Worker 后榜单与统计即为真实云端数据。
 
-**Q：窗口对战能跨电脑吗？**
-A：不能。它基于 BroadcastChannel，用于同设备多窗口实时对战（含邀请链接）。跨设备需要 WebSocket 中继，属后续扩展方向。
+**Q：窗口对战能跨电脑 / 手机吗？**
+A：能。选「局域网」传输：主机双击 `lan-play.bat` 启动中继服务，同一 Wi-Fi 下的其他设备打开主机局域网地址、输入同一房间码即可真实跨设备对战（见「局域网联机」）。选「同机窗口」则仍限同设备多标签页（BroadcastChannel，零服务器）。
+
+**Q：难度 / 速度调整会影响对战公平吗？**
+A：不会。起始等级与重力速度仅作用于单人模式（马拉松 / 竞速 / 每日）；所有对战模式（匹配 PK / 双人 / 窗口 / 局域网）统一使用标准速度，保证公平。
 
 **Q：每日挑战为什么只计今日榜？**
 A：每日挑战按日期种子当天有效，成绩只进入「今日」桶，次日自动换新序列。
@@ -250,12 +288,12 @@ A：浏览器开发者工具 → Application → Local Storage，删除 `fb_` �
 
 ## 🛠️ 技术栈
 
-React 18 · TypeScript 5.6 · Vite 5 · Canvas 2D（精灵缓存 + 粒子系统）· WebAudio（全程序化合成）· BroadcastChannel · Cloudflare Workers + KV · 自托管字体 Orbitron / Rajdhani
+React 18 · TypeScript 5.6 · Vite 5 · Canvas 2D（精灵缓存 + 粒子系统）· WebAudio（全程序化合成）· BroadcastChannel（同机窗口）· WebSocket + Node `ws` 中继（局域网跨设备）· Cloudflare Workers + KV · 自托管字体 Orbitron / Rajdhani
 
 ---
 
 ## 📄 开源协议
 
-MIT License · 见 [LICENSE](LICENSE)。欢迎 Issue / PR：引擎细则、手感参数、云端扩展（如跨设备 WebSocket 中继）都是好方向。
+MIT License · 见 [LICENSE](LICENSE)。欢迎 Issue / PR：引擎细则、手感参数、主题配色、云端与联机扩展都是好方向。
 
 祝武运昌隆，烧穿排行榜。🔥

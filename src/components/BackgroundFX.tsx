@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { currentTheme } from '../game/constants';
 
 interface Ember { x: number; y: number; vy: number; sway: number; phase: number; size: number; a: number; hue: number }
 
@@ -29,7 +30,7 @@ export default function BackgroundFX() {
       phase: Math.random() * Math.PI * 2,
       size: 0.7 + Math.random() * 2.1,
       a: 0.15 + Math.random() * 0.5,
-      hue: 18 + Math.random() * 32,
+      hue: currentTheme.emberHue[0] + Math.random() * (currentTheme.emberHue[1] - currentTheme.emberHue[0]),
     });
 
     let last = performance.now();
